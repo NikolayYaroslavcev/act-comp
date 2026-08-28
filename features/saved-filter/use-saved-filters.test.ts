@@ -90,6 +90,7 @@ describe("useSavedFilters", () => {
         body: JSON.stringify({ action: "save", criteria: EMPTY_TASK_FILTER_CRITERIA, label: "Mine" }),
       }),
     );
+    await waitFor(() => expect(result.current.saved).toEqual([{ id: "s1" }]));
   });
 
   it("deletes a filter and refreshes the lists", async () => {
