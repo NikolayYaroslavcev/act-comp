@@ -500,3 +500,68 @@ export function searchTasks(tasks: Task[], query: string): Task[] {
 
   return tasks.filter((task) => taskSearchHaystack(task).some((value) => value.toLowerCase().includes(normalized)));
 }
+
+export interface TaskFilters {
+  status?: TaskStatus[];
+  category?: string;
+  tags?: string[];
+  priorityMin?: number;
+  priorityMax?: number;
+  deadlineFrom?: string;
+  deadlineTo?: string;
+}
+
+function taskMatchesDeadlineRange(task: Task, filters: TaskFilters): boolean {
+  if (filters.deadlineFrom === undefined && filters.deadlineTo === undefined) {
+    return true;
+  }
+  if (task.deadline === null) {
+    return false;
+  }
+
+  const deadlineMs = new Date(task.deadline).getTime();
+  if (filters.deadlineFrom !== undefined && deadlineMs < new Date(filters.deadlineFrom).getTime()) {
+    return false;
+  }
+  if (filters.deadlineTo !== undefined && deadlineMs > new Date(filters.deadlineTo).getTime()) {
+    return false;
+  }
+  return true;
+}
+
+function taskMatchesFilters(task: Task, filters: TaskFilters): boolean {
+  if (filters.status && filters.status.length > 0 && !filters.status.includes(task.status)) {
+    return false;
+  }
+  if (filters.category !== undefined && task.category !== filters.category) {
+    return false;
+  }
+  if (filters.tags && filters.tags.length > 0 && !filters.tags.some((tag) => task.tags.includes(tag))) {
+    return false;
+  }
+  if (filters.priorityMin !== undefined && task.priority < filters.priorityMin) {
+    return false;
+  }
+  if (filters.priorityMax !== undefined && task.priority > filters.priorityMax) {
+    return false;
+  }
+  return taskMatchesDeadlineRange(task, filters);
+}
+
+/**
+ * Structured filters (status/category/tags/priority range/deadline range),
+ * every provided dimension combined with AND. Complements searchTasks,
+ * which covers free-text fields only.
+ */
+export function filterTasks(tasks: Task[], filters: TaskFilters): Task[] {
+  return tasks.filter((task) => taskMatchesFilters(task, filters));
+}
+
+export interface TaskQuery {
+  search: string;
+  filters: TaskFilters;
+}
+
+export function applyTaskQuery(tasks: Task[], query: TaskQuery): Task[] {
+  return filterTasks(searchTasks(tasks, query.search), query.filters);
+}

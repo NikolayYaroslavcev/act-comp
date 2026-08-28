@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  applyTaskQuery,
   buildDuplicatedTasks,
   buildTaskDeletionHistoryEntry,
   buildTaskRestorationHistoryEntry,
@@ -11,6 +12,7 @@ import {
   DependencyCycleError,
   detectCycle,
   diffTaskChanges,
+  filterTasks,
   getCascadeUpdates,
   isTaskOverdue,
   searchTasks,
@@ -1168,5 +1170,146 @@ describe("searchTasks", () => {
       makeTask({ id: "t3", title: "Gamma task" }),
     ];
     expect(searchTasks(tasks, "task").map((t) => t.id)).toEqual(["t1", "t2", "t3"]);
+  });
+});
+
+describe("filterTasks", () => {
+  it("returns all tasks unchanged when no filter fields are set", () => {
+    const tasks = [makeTask({ id: "t1" }), makeTask({ id: "t2" })];
+    expect(filterTasks(tasks, {})).toEqual(tasks);
+  });
+
+  it("does not mutate the input array", () => {
+    const tasks = [makeTask({ id: "t1", status: "new" })];
+    const snapshot = [...tasks];
+    filterTasks(tasks, { status: ["done"] });
+    expect(tasks).toEqual(snapshot);
+  });
+
+  it("filters by a single status", () => {
+    const tasks = [makeTask({ id: "t1", status: "new" }), makeTask({ id: "t2", status: "done" })];
+    expect(filterTasks(tasks, { status: ["done"] })).toEqual([tasks[1]]);
+  });
+
+  it("filters by several statuses (OR within the field)", () => {
+    const tasks = [
+      makeTask({ id: "t1", status: "new" }),
+      makeTask({ id: "t2", status: "in_progress" }),
+      makeTask({ id: "t3", status: "done" }),
+    ];
+    expect(filterTasks(tasks, { status: ["new", "done"] }).map((t) => t.id)).toEqual(["t1", "t3"]);
+  });
+
+  it("filters by category (exact match)", () => {
+    const tasks = [makeTask({ id: "t1", category: "Backend" }), makeTask({ id: "t2", category: "Frontend" })];
+    expect(filterTasks(tasks, { category: "Backend" })).toEqual([tasks[0]]);
+  });
+
+  it("excludes tasks with a null category when a category filter is set", () => {
+    const tasks = [makeTask({ id: "t1", category: null })];
+    expect(filterTasks(tasks, { category: "Backend" })).toEqual([]);
+  });
+
+  it("filters by tags using match-any semantics", () => {
+    const tasks = [
+      makeTask({ id: "t1", tags: ["urgent"] }),
+      makeTask({ id: "t2", tags: ["billing"] }),
+      makeTask({ id: "t3", tags: ["docs"] }),
+    ];
+    expect(filterTasks(tasks, { tags: ["urgent", "billing"] }).map((t) => t.id)).toEqual(["t1", "t2"]);
+  });
+
+  it("filters by priority min only", () => {
+    const tasks = [makeTask({ id: "t1", priority: 2 }), makeTask({ id: "t2", priority: 4 })];
+    expect(filterTasks(tasks, { priorityMin: 3 })).toEqual([tasks[1]]);
+  });
+
+  it("filters by priority max only", () => {
+    const tasks = [makeTask({ id: "t1", priority: 2 }), makeTask({ id: "t2", priority: 4 })];
+    expect(filterTasks(tasks, { priorityMax: 3 })).toEqual([tasks[0]]);
+  });
+
+  it("filters by priority min and max together", () => {
+    const tasks = [
+      makeTask({ id: "t1", priority: 1 }),
+      makeTask({ id: "t2", priority: 3 }),
+      makeTask({ id: "t3", priority: 5 }),
+    ];
+    expect(filterTasks(tasks, { priorityMin: 2, priorityMax: 4 })).toEqual([tasks[1]]);
+  });
+
+  it("includes a task whose priority equals both min and max", () => {
+    const tasks = [makeTask({ id: "t1", priority: 3 })];
+    expect(filterTasks(tasks, { priorityMin: 3, priorityMax: 3 })).toEqual(tasks);
+  });
+
+  it("filters by deadline 'from' only", () => {
+    const tasks = [
+      makeTask({ id: "t1", deadline: "2026-08-01T00:00:00.000Z" }),
+      makeTask({ id: "t2", deadline: "2026-09-01T00:00:00.000Z" }),
+    ];
+    expect(filterTasks(tasks, { deadlineFrom: "2026-08-15T00:00:00.000Z" })).toEqual([tasks[1]]);
+  });
+
+  it("filters by deadline 'to' only", () => {
+    const tasks = [
+      makeTask({ id: "t1", deadline: "2026-08-01T00:00:00.000Z" }),
+      makeTask({ id: "t2", deadline: "2026-09-01T00:00:00.000Z" }),
+    ];
+    expect(filterTasks(tasks, { deadlineTo: "2026-08-15T00:00:00.000Z" })).toEqual([tasks[0]]);
+  });
+
+  it("filters by a full deadline range", () => {
+    const tasks = [
+      makeTask({ id: "t1", deadline: "2026-08-01T00:00:00.000Z" }),
+      makeTask({ id: "t2", deadline: "2026-08-15T00:00:00.000Z" }),
+      makeTask({ id: "t3", deadline: "2026-09-01T00:00:00.000Z" }),
+    ];
+    expect(
+      filterTasks(tasks, { deadlineFrom: "2026-08-10T00:00:00.000Z", deadlineTo: "2026-08-20T00:00:00.000Z" }),
+    ).toEqual([tasks[1]]);
+  });
+
+  it("includes a task whose deadline exactly equals equal from/to bounds", () => {
+    const tasks = [makeTask({ id: "t1", deadline: "2026-08-15T00:00:00.000Z" })];
+    expect(
+      filterTasks(tasks, { deadlineFrom: "2026-08-15T00:00:00.000Z", deadlineTo: "2026-08-15T00:00:00.000Z" }),
+    ).toEqual(tasks);
+  });
+
+  it("never matches a null deadline when a deadline range is set", () => {
+    const tasks = [makeTask({ id: "t1", deadline: null })];
+    expect(filterTasks(tasks, { deadlineFrom: "2026-01-01T00:00:00.000Z" })).toEqual([]);
+  });
+
+  it("combines every active filter with AND", () => {
+    const tasks = [
+      makeTask({ id: "t1", status: "in_progress", priority: 4, deadline: "2026-08-10T00:00:00.000Z" }),
+      makeTask({ id: "t2", status: "in_progress", priority: 1, deadline: "2026-08-10T00:00:00.000Z" }),
+      makeTask({ id: "t3", status: "done", priority: 4, deadline: "2026-08-10T00:00:00.000Z" }),
+    ];
+    expect(
+      filterTasks(tasks, { status: ["in_progress"], priorityMin: 3, deadlineTo: "2026-08-31T00:00:00.000Z" }),
+    ).toEqual([tasks[0]]);
+  });
+});
+
+describe("applyTaskQuery", () => {
+  it("combines search and filters with AND", () => {
+    const tasks = [
+      makeTask({ id: "t1", title: "Deploy service", status: "in_progress" }),
+      makeTask({ id: "t2", title: "Deploy docs", status: "done" }),
+      makeTask({ id: "t3", title: "Write tests", status: "in_progress" }),
+    ];
+    expect(
+      applyTaskQuery(tasks, { search: "deploy", filters: { status: ["in_progress"] } }).map((t) => t.id),
+    ).toEqual(["t1"]);
+  });
+
+  it("does not mutate the input array", () => {
+    const tasks = [makeTask({ id: "t1", title: "Alpha" })];
+    const snapshot = [...tasks];
+    applyTaskQuery(tasks, { search: "alpha", filters: { priorityMin: 1 } });
+    expect(tasks).toEqual(snapshot);
   });
 });
