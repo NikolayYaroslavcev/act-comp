@@ -26,6 +26,29 @@ describe("useSavedFilters", () => {
     expect(fetchMock).toHaveBeenCalledWith("/api/saved-filters?scope=tasks");
   });
 
+  it("defaults recent/saved to empty arrays when the response data is missing them", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { data: {} }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useSavedFilters());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.recent).toEqual([]);
+    expect(result.current.saved).toEqual([]);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("defaults only the missing array when the response data has one but not the other", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { data: { recent: [{ id: "r1" }] } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useSavedFilters());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.recent).toEqual([{ id: "r1" }]);
+    expect(result.current.saved).toEqual([]);
+  });
+
   it("surfaces a session-expired error for a 401 on load", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(401, { error: { message: "Unauthorized" } })));
 

@@ -45,11 +45,11 @@ async function fetchSavedFilterGroups(): Promise<FetchSavedFilterGroupsResult> {
     if (!response.ok) {
       return { ok: false, error: UNEXPECTED_ERROR_MESSAGE };
     }
-    const json = (await response.json().catch(() => null)) as { data?: SavedFilterGroups } | null;
+    const json = (await response.json().catch(() => null)) as { data?: Partial<SavedFilterGroups> } | null;
     if (!json?.data) {
       return { ok: false, error: UNEXPECTED_ERROR_MESSAGE };
     }
-    return { ok: true, data: json.data };
+    return { ok: true, data: { recent: json.data.recent ?? [], saved: json.data.saved ?? [] } };
   } catch {
     return { ok: false, error: NETWORK_ERROR_MESSAGE };
   }
