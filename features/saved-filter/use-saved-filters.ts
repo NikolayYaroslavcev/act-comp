@@ -23,6 +23,7 @@ export interface UseSavedFiltersResult {
   refresh: () => Promise<void>;
   applyFilter: (criteria: TaskFilterCriteria) => Promise<SavedFilter | null>;
   saveFilter: (criteria: TaskFilterCriteria, label: string | null) => Promise<SavedFilter | null>;
+  touchFilter: (id: string) => Promise<SavedFilter | null>;
   deleteFilter: (id: string) => Promise<boolean>;
 }
 
@@ -145,6 +146,8 @@ export function useSavedFilters(): UseSavedFiltersResult {
     [post],
   );
 
+  const touchFilter = useCallback((id: string) => post({ action: "touch", id }), [post]);
+
   const deleteFilter = useCallback(
     async (id: string): Promise<boolean> => {
       setError(null);
@@ -174,5 +177,15 @@ export function useSavedFilters(): UseSavedFiltersResult {
     [refresh],
   );
 
-  return { recent: groups.recent, saved: groups.saved, isLoading, error, refresh, applyFilter, saveFilter, deleteFilter };
+  return {
+    recent: groups.recent,
+    saved: groups.saved,
+    isLoading,
+    error,
+    refresh,
+    applyFilter,
+    saveFilter,
+    touchFilter,
+    deleteFilter,
+  };
 }

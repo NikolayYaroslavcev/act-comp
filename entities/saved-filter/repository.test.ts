@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { getDb } from "@/shared/lib/db";
-import { deleteSavedFilter, listSavedFilters, upsertAppliedFilter, type UpsertFilterInput } from "./repository";
+import {
+  deleteSavedFilter,
+  listSavedFilters,
+  touchSavedFilter,
+  upsertAppliedFilter,
+  type UpsertFilterInput,
+} from "./repository";
 import { EMPTY_TASK_FILTER_CRITERIA, parseSavedFilterQuery } from "./query-schema";
 
 function baseInput(overrides: Partial<UpsertFilterInput> = {}): UpsertFilterInput {
@@ -157,5 +163,65 @@ describe("deleteSavedFilter", () => {
 
   it("returns not_found for a missing id", () => {
     expect(deleteSavedFilter("u1", "missing")).toEqual({ status: "not_found" });
+  });
+});
+
+describe("touchSavedFilter", () => {
+  it("updates usedAt on the caller's own filter and leaves the rest of the record unchanged", () => {
+    const created = upsertAppliedFilter(
+      baseInput({ criteria: { ...EMPTY_TASK_FILTER_CRITERIA, search: "deploy" } }),
+      new Date("2026-08-01T00:00:00.000Z"),
+    );
+
+    const result = touchSavedFilter("u1", created.id, new Date("2026-08-10T00:00:00.000Z"));
+
+    expect(result).toEqual({ status: "ok", filter: { ...created, usedAt: "2026-08-10T00:00:00.000Z" } });
+    expect(parseSavedFilterQuery(result.status === "ok" ? result.filter : created)).toMatchObject({
+      search: "deploy",
+      saved: false,
+    });
+  });
+
+  it("returns not_found for a filter owned by another user and does not modify it", () => {
+    const created = upsertAppliedFilter(baseInput({ userId: "u1" }), new Date("2026-08-01T00:00:00.000Z"));
+
+    expect(touchSavedFilter("u2", created.id, new Date("2026-08-10T00:00:00.000Z"))).toEqual({ status: "not_found" });
+    expect(listSavedFilters("u1", "tasks")[0]?.usedAt).toBe("2026-08-01T00:00:00.000Z");
+  });
+
+  it("returns not_found for a missing id", () => {
+    expect(touchSavedFilter("u1", "missing")).toEqual({ status: "not_found" });
+  });
+
+  it("does not affect the recent-cap count when touching a recent filter", () => {
+    const created: ReturnType<typeof upsertAppliedFilter>[] = [];
+    for (let i = 0; i < 5; i += 1) {
+      created.push(
+        upsertAppliedFilter(
+          baseInput({ criteria: { ...EMPTY_TASK_FILTER_CRITERIA, search: `q${i}` } }),
+          new Date(2026, 7, i + 1),
+        ),
+      );
+    }
+
+    touchSavedFilter("u1", created[0].id, new Date("2026-08-20T00:00:00.000Z"));
+
+    const recent = listSavedFilters("u1", "tasks");
+    expect(recent).toHaveLength(5);
+    expect(recent.map((filter) => filter.id).sort()).toEqual(created.map((filter) => filter.id).sort());
+  });
+
+  it("touches a saved (saved:true) filter identically, with no cap interaction", () => {
+    const created = upsertAppliedFilter(
+      baseInput({ saved: true, criteria: { ...EMPTY_TASK_FILTER_CRITERIA, search: "pinned" } }),
+      new Date("2026-08-01T00:00:00.000Z"),
+    );
+
+    const result = touchSavedFilter("u1", created.id, new Date("2026-08-15T00:00:00.000Z"));
+
+    expect(result).toEqual({ status: "ok", filter: { ...created, usedAt: "2026-08-15T00:00:00.000Z" } });
+    const all = listSavedFilters("u1", "tasks");
+    expect(all).toHaveLength(1);
+    expect(parseSavedFilterQuery(all[0])).toMatchObject({ search: "pinned", saved: true });
   });
 });

@@ -71,7 +71,7 @@ describe("SavedFiltersPanel", () => {
     );
 
     await user.click(screen.getByTestId("saved-filter-apply-r1"));
-    expect(onApplyFilter).toHaveBeenCalledWith(expect.objectContaining({ search: "deploy" }));
+    expect(onApplyFilter).toHaveBeenCalledWith("r1", expect.objectContaining({ search: "deploy" }));
   });
 
   it("lists saved filters with a delete button", async () => {

@@ -38,7 +38,10 @@ export function TaskList({ tasks: initialTasks, now = new Date(), canEdit = fals
         saved={savedFilters.saved}
         isLoading={savedFilters.isLoading}
         error={savedFilters.error}
-        onApplyFilter={restore}
+        onApplyFilter={(id, criteria) => {
+          restore(criteria);
+          void savedFilters.touchFilter(id);
+        }}
         onSaveFilter={(label) => void savedFilters.saveFilter(draft, label)}
         onDeleteFilter={(id) => void savedFilters.deleteFilter(id)}
       />

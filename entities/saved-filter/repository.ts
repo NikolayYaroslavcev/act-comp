@@ -106,3 +106,26 @@ export function deleteSavedFilter(userId: string, id: string): DeleteSavedFilter
   saveDb(db);
   return { status: "ok" };
 }
+
+export type TouchSavedFilterOutcome = { status: "not_found" } | { status: "ok"; filter: SavedFilter };
+
+/**
+ * Direct update-by-id for the "Apply from the Saved/Recent panel" path — bumps
+ * usedAt on the exact record the caller already identified. Unlike
+ * upsertAppliedFilter, this never searches for an equivalent record and never
+ * creates one, so it cannot produce a duplicate and never interacts with
+ * trimRecentFilters (touching only makes a record fresher, i.e. less likely
+ * to be evicted).
+ */
+export function touchSavedFilter(userId: string, id: string, now: Date = new Date()): TouchSavedFilterOutcome {
+  const db = getDb();
+  const existing = db.savedFilters[id];
+  if (!existing || existing.userId !== userId) {
+    return { status: "not_found" };
+  }
+
+  const updated: SavedFilter = { ...existing, usedAt: now.toISOString() };
+  db.savedFilters[id] = updated;
+  saveDb(db);
+  return { status: "ok", filter: updated };
+}

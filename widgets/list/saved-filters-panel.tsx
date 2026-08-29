@@ -12,7 +12,7 @@ interface SavedFiltersPanelProps {
   saved: SavedFilter[];
   isLoading: boolean;
   error: string | null;
-  onApplyFilter: (criteria: TaskFilterCriteria) => void;
+  onApplyFilter: (id: string, criteria: TaskFilterCriteria) => void;
   onSaveFilter: (label: string | null) => void;
   onDeleteFilter: (id: string) => void;
 }
@@ -38,7 +38,7 @@ function FilterList({
   onDeleteFilter,
 }: {
   filters: SavedFilter[];
-  onApplyFilter: (criteria: TaskFilterCriteria) => void;
+  onApplyFilter: (id: string, criteria: TaskFilterCriteria) => void;
   onDeleteFilter?: (id: string) => void;
 }) {
   return (
@@ -52,7 +52,7 @@ function FilterList({
           <li key={filter.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border p-2 text-sm">
             <span className="min-w-0 break-words">{query.label ?? describeCriteria(query)}</span>
             <div className="flex shrink-0 gap-1.5">
-              <Button size="sm" variant="outline" data-testid={`saved-filter-apply-${filter.id}`} onClick={() => onApplyFilter(query)}>
+              <Button size="sm" variant="outline" data-testid={`saved-filter-apply-${filter.id}`} onClick={() => onApplyFilter(filter.id, query)}>
                 Применить
               </Button>
               {onDeleteFilter && (

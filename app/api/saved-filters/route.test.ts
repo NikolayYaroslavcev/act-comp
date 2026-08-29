@@ -113,4 +113,51 @@ describe("POST /api/saved-filters", () => {
     const json = await response.json();
     expect(json.data.query).toMatchObject({ saved: true, label: "Mine" });
   });
+
+  describe("touch action", () => {
+    it("updates usedAt on the caller's own filter and returns 200", async () => {
+      const session = sessionFor("u1", "96");
+      getDb().savedFilters = {
+        mine: {
+          id: "mine",
+          userId: "u1",
+          scope: "tasks",
+          query: { ...EMPTY_TASK_FILTER_CRITERIA, saved: false, label: null },
+          usedAt: "2020-01-01T00:00:00.000Z",
+        },
+      };
+
+      const response = await POST(postSavedFiltersRequest(session.id, { action: "touch", id: "mine" }));
+      expect(response.status).toBe(200);
+      const json = await response.json();
+      expect(json.data.usedAt).not.toBe("2020-01-01T00:00:00.000Z");
+    });
+
+    it("returns 404 for a filter owned by another user", async () => {
+      const session = sessionFor("u2", "97");
+      getDb().savedFilters = {
+        mine: {
+          id: "mine",
+          userId: "u1",
+          scope: "tasks",
+          query: { ...EMPTY_TASK_FILTER_CRITERIA, saved: false, label: null },
+          usedAt: "2020-01-01T00:00:00.000Z",
+        },
+      };
+
+      const response = await POST(postSavedFiltersRequest(session.id, { action: "touch", id: "mine" }));
+      expect(response.status).toBe(404);
+    });
+
+    it("returns 404 for a missing id", async () => {
+      const session = sessionFor("u1", "98");
+      const response = await POST(postSavedFiltersRequest(session.id, { action: "touch", id: "missing" }));
+      expect(response.status).toBe(404);
+    });
+
+    it("returns 401 when no session cookie is present, before body parsing", async () => {
+      const response = await POST(postSavedFiltersRequest(undefined, { action: "touch", id: "mine" }));
+      expect(response.status).toBe(401);
+    });
+  });
 });

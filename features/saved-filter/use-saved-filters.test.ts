@@ -91,6 +91,30 @@ describe("useSavedFilters", () => {
     await waitFor(() => expect(result.current.recent).toEqual([{ id: "r1" }]));
   });
 
+  it("touches a filter and refreshes the lists", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(200, { data: { recent: [{ id: "r1" }], saved: [] } }))
+      .mockResolvedValueOnce(jsonResponse(200, { data: { id: "r1" } }))
+      .mockResolvedValueOnce(jsonResponse(200, { data: { recent: [{ id: "r1" }], saved: [] } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useSavedFilters());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    let returned;
+    await act(async () => {
+      returned = await result.current.touchFilter("r1");
+    });
+
+    expect(returned).toEqual({ id: "r1" });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/saved-filters",
+      expect.objectContaining({ method: "POST", body: JSON.stringify({ action: "touch", id: "r1" }) }),
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
   it("saves a filter with a label", async () => {
     const fetchMock = vi
       .fn()

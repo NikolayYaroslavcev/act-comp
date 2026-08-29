@@ -4,9 +4,11 @@ import { jsonError, jsonOk } from "@/shared/lib/api-response";
 import { requireAuth } from "@/features/auth/require-auth";
 import { savedFilterScopeSchema } from "@/entities/saved-filter/schema";
 import { taskFilterCriteriaSchema } from "@/entities/saved-filter/query-schema";
+import { idSchema } from "@/entities/common/schema";
 import { listSavedFiltersForUser } from "@/features/saved-filter/list-saved-filters";
 import { applyFilterForUser } from "@/features/saved-filter/apply-filter";
 import { saveFilterForUser } from "@/features/saved-filter/save-filter";
+import { touchSavedFilterForUser } from "@/features/saved-filter/touch-saved-filter";
 
 const applyRequestSchema = z.object({ action: z.literal("apply"), criteria: taskFilterCriteriaSchema });
 const saveRequestSchema = z.object({
@@ -14,7 +16,8 @@ const saveRequestSchema = z.object({
   criteria: taskFilterCriteriaSchema,
   label: z.string().min(1).max(100).nullable().optional().default(null),
 });
-const postBodySchema = z.discriminatedUnion("action", [applyRequestSchema, saveRequestSchema]);
+const touchRequestSchema = z.object({ action: z.literal("touch"), id: idSchema });
+const postBodySchema = z.discriminatedUnion("action", [applyRequestSchema, saveRequestSchema, touchRequestSchema]);
 
 export async function GET(request: NextRequest) {
   const auth = requireAuth(request);
@@ -48,6 +51,14 @@ export async function POST(request: NextRequest) {
   const parsed = postBodySchema.safeParse(body);
   if (!parsed.success) {
     return jsonError(400, "Validation failed", parsed.error.issues);
+  }
+
+  if (parsed.data.action === "touch") {
+    const result = touchSavedFilterForUser(auth.user.id, parsed.data.id);
+    if (result.status === "not_found") {
+      return jsonError(404, "Saved filter not found");
+    }
+    return jsonOk(result.filter);
   }
 
   const filter =
