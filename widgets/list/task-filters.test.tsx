@@ -1,7 +1,7 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { TaskFilters } from "./task-filters";
+import { fromDatetimeLocalValue, TaskFilters, toDatetimeLocalValue } from "./task-filters";
 import { EMPTY_TASK_FILTER_CRITERIA } from "@/entities/saved-filter/query-schema";
 import type { Task } from "@/entities/task/schema";
 
@@ -123,5 +123,52 @@ describe("TaskFilters", () => {
 
     await user.click(screen.getByTestId("task-filters-clear"));
     expect(onClear).toHaveBeenCalled();
+  });
+
+  describe("deadline datetime-local round-trip (timezone regression)", () => {
+    it("round-trips a datetime-local value through fromDatetimeLocalValue -> toDatetimeLocalValue unchanged, regardless of the runner's timezone", () => {
+      // Whatever offset fromDatetimeLocalValue applies converting local -> UTC,
+      // toDatetimeLocalValue must apply the exact inverse converting UTC -> local,
+      // so this composition is timezone-independent by construction.
+      const typed = "2026-09-15T14:30";
+      const iso = fromDatetimeLocalValue(typed);
+      expect(iso).not.toBeNull();
+      expect(toDatetimeLocalValue(iso)).toBe(typed);
+    });
+
+    it("keeps the displayed deadlineFrom value stable across repeated round-trips (no drift on re-render)", () => {
+      const typed = "2026-01-01T00:05";
+      const firstIso = fromDatetimeLocalValue(typed);
+      const firstDisplay = toDatetimeLocalValue(firstIso);
+      const secondIso = fromDatetimeLocalValue(firstDisplay);
+      const secondDisplay = toDatetimeLocalValue(secondIso);
+      expect(secondDisplay).toBe(firstDisplay);
+      expect(secondIso).toBe(firstIso);
+    });
+
+    it("renders the deadlineFrom input with the round-tripped value after setting it via the draft", () => {
+      const onDraftChange = vi.fn();
+      const { rerender } = render(
+        <TaskFilters tasks={TASKS} draft={EMPTY_TASK_FILTER_CRITERIA} onDraftChange={onDraftChange} onApply={vi.fn()} onClear={vi.fn()} />,
+      );
+
+      const input = screen.getByTestId("task-filters-deadline-from");
+      fireEvent.change(input, { target: { value: "2026-09-15T14:30" } });
+
+      const lastCall = onDraftChange.mock.calls[onDraftChange.mock.calls.length - 1][0];
+      expect(lastCall.deadlineFrom).not.toBeNull();
+
+      rerender(
+        <TaskFilters
+          tasks={TASKS}
+          draft={{ ...EMPTY_TASK_FILTER_CRITERIA, deadlineFrom: lastCall.deadlineFrom }}
+          onDraftChange={onDraftChange}
+          onApply={vi.fn()}
+          onClear={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByTestId("task-filters-deadline-from")).toHaveValue("2026-09-15T14:30");
+    });
   });
 });

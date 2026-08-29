@@ -30,12 +30,14 @@ function distinctTags(tasks: Task[]): string[] {
   return [...new Set(tasks.flatMap((task) => task.tags))];
 }
 
-function toDatetimeLocalValue(iso: string | null): string {
+export function toDatetimeLocalValue(iso: string | null): string {
   if (iso === null) return "";
-  return iso.slice(0, 16);
+  const date = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-function fromDatetimeLocalValue(value: string): string | null {
+export function fromDatetimeLocalValue(value: string): string | null {
   if (value === "") return null;
   return new Date(value).toISOString();
 }
