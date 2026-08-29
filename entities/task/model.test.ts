@@ -14,10 +14,14 @@ import {
   diffTaskChanges,
   filterTasks,
   getCascadeUpdates,
+  groupTasksByKanbanColumn,
+  isTaskBlocked,
   isTaskOverdue,
+  KANBAN_STATUSES,
   searchTasks,
   selectActiveSubtasks,
   selectVisibleTasks,
+  sortTasksForKanbanColumn,
   topoSort,
   validateParentAssignment,
 } from "@/entities/task/model";
@@ -1311,5 +1315,109 @@ describe("applyTaskQuery", () => {
     const snapshot = [...tasks];
     applyTaskQuery(tasks, { search: "alpha", filters: { priorityMin: 1 } });
     expect(tasks).toEqual(snapshot);
+  });
+});
+
+describe("isTaskBlocked", () => {
+  it("is false when the task has no dependencies", () => {
+    const a = makeTask({ id: "a", dependsOn: [] });
+    expect(isTaskBlocked(a, new Map([["a", a]]))).toBe(false);
+  });
+
+  it("is true when a dependency is not done", () => {
+    const a = makeTask({ id: "a", dependsOn: ["b"] });
+    const b = makeTask({ id: "b", status: "in_progress" });
+    expect(
+      isTaskBlocked(
+        a,
+        new Map([
+          ["a", a],
+          ["b", b],
+        ]),
+      ),
+    ).toBe(true);
+  });
+
+  it("is false once every dependency is done", () => {
+    const a = makeTask({ id: "a", dependsOn: ["b"] });
+    const b = makeTask({ id: "b", status: "done" });
+    expect(
+      isTaskBlocked(
+        a,
+        new Map([
+          ["a", a],
+          ["b", b],
+        ]),
+      ),
+    ).toBe(false);
+  });
+
+  it("ignores a soft-deleted dependency", () => {
+    const a = makeTask({ id: "a", dependsOn: ["b"] });
+    const b = makeTask({ id: "b", status: "new", deletedAt: "2026-08-01T00:00:00.000Z" });
+    expect(
+      isTaskBlocked(
+        a,
+        new Map([
+          ["a", a],
+          ["b", b],
+        ]),
+      ),
+    ).toBe(false);
+  });
+
+  it("ignores a dependency id with no matching task", () => {
+    const a = makeTask({ id: "a", dependsOn: ["missing"] });
+    expect(isTaskBlocked(a, new Map([["a", a]]))).toBe(false);
+  });
+});
+
+describe("KANBAN_STATUSES", () => {
+  it("lists all task statuses in board order", () => {
+    expect(KANBAN_STATUSES).toEqual(["new", "in_progress", "done"]);
+  });
+});
+
+describe("sortTasksForKanbanColumn", () => {
+  it("orders by priority descending", () => {
+    const low = makeTask({ id: "low", priority: 1 });
+    const high = makeTask({ id: "high", priority: 5 });
+    expect(sortTasksForKanbanColumn([low, high]).map((t) => t.id)).toEqual(["high", "low"]);
+  });
+
+  it("breaks a priority tie by createdAt ascending", () => {
+    const later = makeTask({ id: "later", priority: 3, createdAt: "2026-08-02T00:00:00.000Z" });
+    const earlier = makeTask({ id: "earlier", priority: 3, createdAt: "2026-08-01T00:00:00.000Z" });
+    expect(sortTasksForKanbanColumn([later, earlier]).map((t) => t.id)).toEqual(["earlier", "later"]);
+  });
+
+  it("does not mutate the input array", () => {
+    const tasks = [makeTask({ id: "a", priority: 1 }), makeTask({ id: "b", priority: 5 })];
+    const snapshot = [...tasks];
+    sortTasksForKanbanColumn(tasks);
+    expect(tasks).toEqual(snapshot);
+  });
+});
+
+describe("groupTasksByKanbanColumn", () => {
+  it("groups tasks under their status", () => {
+    const a = makeTask({ id: "a", status: "new" });
+    const b = makeTask({ id: "b", status: "in_progress" });
+    const c = makeTask({ id: "c", status: "done" });
+    const grouped = groupTasksByKanbanColumn([a, b, c]);
+    expect(grouped.new.map((t) => t.id)).toEqual(["a"]);
+    expect(grouped.in_progress.map((t) => t.id)).toEqual(["b"]);
+    expect(grouped.done.map((t) => t.id)).toEqual(["c"]);
+  });
+
+  it("returns an empty array for a status with no tasks", () => {
+    const a = makeTask({ id: "a", status: "new" });
+    expect(groupTasksByKanbanColumn([a]).done).toEqual([]);
+  });
+
+  it("sorts each column using sortTasksForKanbanColumn", () => {
+    const low = makeTask({ id: "low", status: "new", priority: 1 });
+    const high = makeTask({ id: "high", status: "new", priority: 5 });
+    expect(groupTasksByKanbanColumn([low, high]).new.map((t) => t.id)).toEqual(["high", "low"]);
   });
 });

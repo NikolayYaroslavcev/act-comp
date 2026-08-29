@@ -184,7 +184,7 @@ export interface CascadeUpdate {
   recalculatedPriority: number;
 }
 
-function isTaskBlocked(task: Task, byId: Map<string, Task>): boolean {
+export function isTaskBlocked(task: Task, byId: ReadonlyMap<string, Task>): boolean {
   return task.dependsOn.some((depId) => {
     const dep = byId.get(depId);
     return dep !== undefined && dep.deletedAt === null && dep.status !== "done";
@@ -428,6 +428,31 @@ export function canRestoreTask(task: Task, now: Date): boolean {
 
 export function selectVisibleTasks(tasks: Task[], visibleListIds: ReadonlySet<string>): Task[] {
   return tasks.filter((task) => task.deletedAt === null && visibleListIds.has(task.listId));
+}
+
+export const KANBAN_STATUSES: readonly TaskStatus[] = ["new", "in_progress", "done"];
+
+/**
+ * Deterministic within-column order: no persisted position field exists in
+ * the task model, so ordering is derived on every read rather than stored
+ * or reordered by drag — highest priority first, ties broken by creation
+ * order so the result never depends on Map/Set iteration order.
+ */
+export function sortTasksForKanbanColumn(tasks: Task[]): Task[] {
+  return [...tasks].sort((a, b) => {
+    if (b.priority !== a.priority) {
+      return b.priority - a.priority;
+    }
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+  });
+}
+
+export function groupTasksByKanbanColumn(tasks: Task[]): Record<TaskStatus, Task[]> {
+  const groups = { new: [], in_progress: [], done: [] } as Record<TaskStatus, Task[]>;
+  for (const status of KANBAN_STATUSES) {
+    groups[status] = sortTasksForKanbanColumn(tasks.filter((task) => task.status === status));
+  }
+  return groups;
 }
 
 export function countTasksByStatus(tasks: Task[]): TaskStatusCounts {

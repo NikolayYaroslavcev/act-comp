@@ -36,6 +36,12 @@ yarn-error.log*
 # vercel
 .vercel
 
+# file-backed session store (runtime state, seeded from data.json)
+/.local-state/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# internal task docs (spec/plan, not part of the shipped project)
+/docs

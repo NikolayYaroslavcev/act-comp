@@ -5,6 +5,7 @@ import type { Task } from "@/entities/task/schema";
 import { TaskDetail } from "@/widgets/task/task-detail";
 import { useTaskFilters } from "@/features/task/use-task-filters";
 import { useSavedFilters } from "@/features/saved-filter/use-saved-filters";
+import { ExportActions } from "./export-actions";
 import { TaskFilters } from "./task-filters";
 import { SavedFiltersPanel } from "./saved-filters-panel";
 import { TaskRow } from "./task-row";
@@ -13,9 +14,15 @@ interface TaskListProps {
   tasks: Task[];
   now?: Date;
   canEdit?: boolean;
+  exportList?: { id: string; title: string };
 }
 
-export function TaskList({ tasks: initialTasks, now = new Date(), canEdit = false }: TaskListProps) {
+export function TaskList({
+  tasks: initialTasks,
+  now = new Date(),
+  canEdit = false,
+  exportList,
+}: TaskListProps) {
   const [tasks, setTasks] = useState(initialTasks);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const { draft, setDraft, apply, clear, restore, filteredTasks, appliedSearch } = useTaskFilters(tasks);
@@ -31,6 +38,17 @@ export function TaskList({ tasks: initialTasks, now = new Date(), canEdit = fals
 
   return (
     <div className="flex flex-col gap-4">
+      {exportList && (
+        <div className="flex justify-end">
+          <ExportActions
+            listId={exportList.id}
+            listTitle={exportList.title}
+            tasks={filteredTasks}
+            lookupTasks={tasks}
+          />
+        </div>
+      )}
+
       <TaskFilters tasks={tasks} draft={draft} onDraftChange={setDraft} onApply={handleApply} onClear={clear} />
 
       <SavedFiltersPanel
