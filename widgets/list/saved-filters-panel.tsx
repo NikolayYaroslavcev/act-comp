@@ -12,7 +12,6 @@ interface SavedFiltersPanelProps {
   saved: SavedFilter[];
   isLoading: boolean;
   error: string | null;
-  currentCriteria: TaskFilterCriteria;
   onApplyFilter: (criteria: TaskFilterCriteria) => void;
   onSaveFilter: (label: string | null) => void;
   onDeleteFilter: (id: string) => void;
@@ -76,7 +75,6 @@ export function SavedFiltersPanel({
   saved,
   isLoading,
   error,
-  currentCriteria,
   onApplyFilter,
   onSaveFilter,
   onDeleteFilter,

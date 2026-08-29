@@ -28,6 +28,33 @@ export interface UseSavedFiltersResult {
 
 const EMPTY_GROUPS: SavedFilterGroups = { recent: [], saved: [] };
 
+type FetchSavedFilterGroupsResult = { ok: true; data: SavedFilterGroups } | { ok: false; error: string };
+
+/**
+ * Plain (non-hook) fetch + response parsing, shared by the mount effect's
+ * inline `load()` and the exported `refresh` callback so neither has to
+ * duplicate the request/parsing logic. Deliberately does not touch state —
+ * callers decide how (and whether) to apply the result.
+ */
+async function fetchSavedFilterGroups(): Promise<FetchSavedFilterGroupsResult> {
+  try {
+    const response = await fetch("/api/saved-filters?scope=tasks");
+    if (response.status === 401) {
+      return { ok: false, error: SESSION_EXPIRED_MESSAGE };
+    }
+    if (!response.ok) {
+      return { ok: false, error: UNEXPECTED_ERROR_MESSAGE };
+    }
+    const json = (await response.json().catch(() => null)) as { data?: SavedFilterGroups } | null;
+    if (!json?.data) {
+      return { ok: false, error: UNEXPECTED_ERROR_MESSAGE };
+    }
+    return { ok: true, data: json.data };
+  } catch {
+    return { ok: false, error: NETWORK_ERROR_MESSAGE };
+  }
+}
+
 export function useSavedFilters(): UseSavedFiltersResult {
   const [groups, setGroups] = useState<SavedFilterGroups>(EMPTY_GROUPS);
   const [isLoading, setIsLoading] = useState(true);
@@ -36,32 +63,41 @@ export function useSavedFilters(): UseSavedFiltersResult {
   const refresh = useCallback(async () => {
     setIsLoading(true);
     setError(null);
-    try {
-      const response = await fetch("/api/saved-filters?scope=tasks");
-      if (response.status === 401) {
-        setError(SESSION_EXPIRED_MESSAGE);
-        return;
-      }
-      if (!response.ok) {
-        setError(UNEXPECTED_ERROR_MESSAGE);
-        return;
-      }
-      const json = (await response.json().catch(() => null)) as { data?: SavedFilterGroups } | null;
-      if (!json?.data) {
-        setError(UNEXPECTED_ERROR_MESSAGE);
-        return;
-      }
-      setGroups(json.data);
-    } catch {
-      setError(NETWORK_ERROR_MESSAGE);
-    } finally {
-      setIsLoading(false);
+    const result = await fetchSavedFilterGroups();
+    if (result.ok) {
+      setGroups(result.data);
+    } else {
+      setError(result.error);
     }
+    setIsLoading(false);
   }, []);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    let cancelled = false;
+
+    async function load() {
+      setIsLoading(true);
+      setError(null);
+
+      const result = await fetchSavedFilterGroups();
+      if (cancelled) {
+        return;
+      }
+
+      if (result.ok) {
+        setGroups(result.data);
+      } else {
+        setError(result.error);
+      }
+      setIsLoading(false);
+    }
+
+    load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const post = useCallback(
     async (body: unknown): Promise<SavedFilter | null> => {
