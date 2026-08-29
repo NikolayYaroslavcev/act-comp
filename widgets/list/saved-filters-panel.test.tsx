@@ -33,10 +33,11 @@ describe("SavedFiltersPanel", () => {
     expect(screen.getByTestId("saved-filters-loading")).toBeInTheDocument();
   });
 
-  it("shows an error state", () => {
+  it("shows an error banner without unmounting the rest of the panel", () => {
+    const recentFilter = makeFilter({ id: "r1", saved: false, query: { ...EMPTY_TASK_FILTER_CRITERIA, search: "deploy", saved: false, label: null } });
     render(
       <SavedFiltersPanel
-        recent={[]}
+        recent={[recentFilter]}
         saved={[]}
         isLoading={false}
         error="Не удалось соединиться с сервером"
@@ -46,6 +47,11 @@ describe("SavedFiltersPanel", () => {
       />,
     );
     expect(screen.getByTestId("saved-filters-error")).toHaveTextContent("Не удалось соединиться с сервером");
+    // The save box and the recent/saved lists must still render underneath the
+    // error banner — an error should never be a dead end for the whole panel.
+    expect(screen.getByTestId("saved-filters-save")).toBeInTheDocument();
+    expect(screen.getByTestId("saved-filters-recent")).toBeInTheDocument();
+    expect(screen.getByTestId("saved-filter-apply-r1")).toBeInTheDocument();
   });
 
   it("lists recent filters and applies one on click", async () => {

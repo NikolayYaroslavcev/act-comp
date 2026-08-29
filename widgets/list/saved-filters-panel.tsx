@@ -89,16 +89,14 @@ export function SavedFiltersPanel({
     );
   }
 
-  if (error) {
-    return (
-      <p className="text-sm text-destructive" data-testid="saved-filters-error">
-        {error}
-      </p>
-    );
-  }
-
   return (
     <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4">
+      {error && (
+        <p className="text-sm text-destructive" data-testid="saved-filters-error">
+          {error}
+        </p>
+      )}
+
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-0 flex-1 space-y-1.5">
           <Label htmlFor="saved-filters-save-label">Название фильтра (опционально)</Label>
