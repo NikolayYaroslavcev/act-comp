@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { SavedFilter } from "@/entities/saved-filter/schema";
-import { parseSavedFilterQuery, type TaskFilterCriteria } from "@/entities/saved-filter/query-schema";
+import { safeParseSavedFilterQuery, type TaskFilterCriteria } from "@/entities/saved-filter/query-schema";
 import { Button } from "@/shared/ui/button";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
@@ -44,7 +44,10 @@ function FilterList({
   return (
     <ul className="flex flex-col gap-1.5">
       {filters.map((filter) => {
-        const query = parseSavedFilterQuery(filter);
+        const query = safeParseSavedFilterQuery(filter);
+        if (!query) {
+          return null;
+        }
         return (
           <li key={filter.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border p-2 text-sm">
             <span className="min-w-0 break-words">{query.label ?? describeCriteria(query)}</span>

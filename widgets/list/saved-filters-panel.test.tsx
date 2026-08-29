@@ -95,6 +95,35 @@ describe("SavedFiltersPanel", () => {
     expect(onDeleteFilter).toHaveBeenCalledWith("s1");
   });
 
+  it("skips a malformed saved filter record instead of crashing, while still rendering valid ones", () => {
+    const validFilter = makeFilter({ id: "s1", saved: true, label: "Mine" });
+    const malformedFilter = {
+      id: "s2",
+      userId: "u1",
+      scope: "tasks",
+      usedAt: "2026-08-01T00:00:00.000Z",
+      // Missing required fields (e.g. `status`, `saved`) — fails savedFilterQuerySchema.
+      query: { search: "broken" },
+    } as unknown as SavedFilter;
+
+    expect(() =>
+      render(
+        <SavedFiltersPanel
+          recent={[]}
+          saved={[validFilter, malformedFilter]}
+          isLoading={false}
+          error={null}
+          onApplyFilter={vi.fn()}
+          onSaveFilter={vi.fn()}
+          onDeleteFilter={vi.fn()}
+        />,
+      ),
+    ).not.toThrow();
+
+    expect(screen.getByText("Mine")).toBeInTheDocument();
+    expect(screen.queryByTestId("saved-filter-apply-s2")).not.toBeInTheDocument();
+  });
+
   it("saves the current criteria with the entered label", async () => {
     const user = userEvent.setup();
     const onSaveFilter = vi.fn();
