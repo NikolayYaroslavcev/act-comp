@@ -42,6 +42,13 @@ export function fromDatetimeLocalValue(value: string): string | null {
   return new Date(value).toISOString();
 }
 
+function clampPriority(value: string): number | null {
+  if (value === "") return null;
+  const parsed = Number(value);
+  if (Number.isNaN(parsed)) return null;
+  return Math.min(5, Math.max(1, Math.round(parsed)));
+}
+
 export function TaskFilters({ tasks, draft, onDraftChange, onApply, onClear }: TaskFiltersProps) {
   const categories = distinctCategories(tasks);
   const tags = distinctTags(tasks);
@@ -138,9 +145,7 @@ export function TaskFilters({ tasks, draft, onDraftChange, onApply, onClear }: T
             min={1}
             max={5}
             value={draft.priorityMin ?? ""}
-            onChange={(event) =>
-              onDraftChange({ ...draft, priorityMin: event.target.value === "" ? null : Number(event.target.value) })
-            }
+            onChange={(event) => onDraftChange({ ...draft, priorityMin: clampPriority(event.target.value) })}
           />
           <Label htmlFor="task-filters-priority-max">Приоритет до</Label>
           <Input
@@ -150,9 +155,7 @@ export function TaskFilters({ tasks, draft, onDraftChange, onApply, onClear }: T
             min={1}
             max={5}
             value={draft.priorityMax ?? ""}
-            onChange={(event) =>
-              onDraftChange({ ...draft, priorityMax: event.target.value === "" ? null : Number(event.target.value) })
-            }
+            onChange={(event) => onDraftChange({ ...draft, priorityMax: clampPriority(event.target.value) })}
           />
         </div>
 

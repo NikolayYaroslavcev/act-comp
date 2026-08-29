@@ -103,6 +103,28 @@ describe("TaskFilters", () => {
     expect(onDraftChange).toHaveBeenLastCalledWith({ ...EMPTY_TASK_FILTER_CRITERIA, priorityMin: 3 });
   });
 
+  it("clamps an out-of-range priorityMin value to the valid 1-5 bound", async () => {
+    const user = userEvent.setup();
+    const onDraftChange = vi.fn();
+    render(
+      <TaskFilters tasks={TASKS} draft={EMPTY_TASK_FILTER_CRITERIA} onDraftChange={onDraftChange} onApply={vi.fn()} onClear={vi.fn()} />,
+    );
+
+    await user.type(screen.getByTestId("task-filters-priority-min"), "9");
+    expect(onDraftChange).toHaveBeenLastCalledWith({ ...EMPTY_TASK_FILTER_CRITERIA, priorityMin: 5 });
+  });
+
+  it("clamps an out-of-range priorityMax value to the valid 1-5 bound", async () => {
+    const user = userEvent.setup();
+    const onDraftChange = vi.fn();
+    render(
+      <TaskFilters tasks={TASKS} draft={EMPTY_TASK_FILTER_CRITERIA} onDraftChange={onDraftChange} onApply={vi.fn()} onClear={vi.fn()} />,
+    );
+
+    await user.type(screen.getByTestId("task-filters-priority-max"), "0");
+    expect(onDraftChange).toHaveBeenLastCalledWith({ ...EMPTY_TASK_FILTER_CRITERIA, priorityMax: 1 });
+  });
+
   it("calls onApply when the Apply button is clicked", async () => {
     const user = userEvent.setup();
     const onApply = vi.fn();
