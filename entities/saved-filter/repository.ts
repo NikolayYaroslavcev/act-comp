@@ -4,7 +4,7 @@ import type { SavedFilter, SavedFilterScope } from "@/entities/saved-filter/sche
 import {
   areTaskFilterCriteriaEqual,
   normalizeTaskFilterCriteria,
-  parseSavedFilterQuery,
+  safeParseSavedFilterQuery,
   type SavedFilterQuery,
   type TaskFilterCriteria,
 } from "@/entities/saved-filter/query-schema";
@@ -14,6 +14,7 @@ const RECENT_LIMIT = 5;
 export function listSavedFilters(userId: string, scope: SavedFilterScope): SavedFilter[] {
   return Object.values(getDb().savedFilters)
     .filter((filter) => filter.userId === userId && filter.scope === scope)
+    .filter((filter) => safeParseSavedFilterQuery(filter) !== null)
     .sort((a, b) => new Date(b.usedAt).getTime() - new Date(a.usedAt).getTime());
 }
 
@@ -34,14 +35,21 @@ function findEquivalentFilter(
     if (filter.userId !== input.userId || filter.scope !== input.scope) {
       return false;
     }
-    const query = parseSavedFilterQuery(filter);
+    const query = safeParseSavedFilterQuery(filter);
+    if (!query) {
+      return false;
+    }
     return query.saved === input.saved && areTaskFilterCriteriaEqual(query, normalized);
   });
 }
 
 function trimRecentFilters(db: Database, userId: string, scope: SavedFilterScope): void {
   const recent = Object.values(db.savedFilters)
-    .filter((filter) => filter.userId === userId && filter.scope === scope && !parseSavedFilterQuery(filter).saved)
+    .filter((filter) => filter.userId === userId && filter.scope === scope)
+    .filter((filter) => {
+      const query = safeParseSavedFilterQuery(filter);
+      return query !== null && !query.saved;
+    })
     .sort((a, b) => new Date(b.usedAt).getTime() - new Date(a.usedAt).getTime());
 
   for (const stale of recent.slice(RECENT_LIMIT)) {

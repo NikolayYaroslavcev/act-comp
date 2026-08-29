@@ -103,6 +103,45 @@ describe("upsertAppliedFilter", () => {
   });
 });
 
+describe("legacy-shaped records", () => {
+  it("excludes a legacy-shaped record from listSavedFilters without throwing", () => {
+    const db = getDb();
+    db.savedFilters.legacy = {
+      id: "legacy",
+      userId: "u1",
+      scope: "tasks",
+      query: { status: ["new", "in_progress"], priority: { min: 3 } },
+      usedAt: "2026-08-01T00:00:00.000Z",
+    };
+    upsertAppliedFilter(baseInput({ criteria: { ...EMPTY_TASK_FILTER_CRITERIA, search: "valid" } }));
+
+    expect(() => listSavedFilters("u1", "tasks")).not.toThrow();
+    const result = listSavedFilters("u1", "tasks");
+    expect(result).toHaveLength(1);
+    expect(result.some((filter) => filter.id === "legacy")).toBe(false);
+  });
+
+  it("does not throw in upsertAppliedFilter when a legacy-shaped record already exists, and creates a new valid record", () => {
+    const db = getDb();
+    db.savedFilters.legacy = {
+      id: "legacy",
+      userId: "u1",
+      scope: "tasks",
+      query: { status: ["new", "in_progress"], priority: { min: 3 } },
+      usedAt: "2026-08-01T00:00:00.000Z",
+    };
+
+    let created: ReturnType<typeof upsertAppliedFilter> | undefined;
+    expect(() => {
+      created = upsertAppliedFilter(baseInput({ criteria: { ...EMPTY_TASK_FILTER_CRITERIA, search: "fresh" } }));
+    }).not.toThrow();
+
+    expect(created).toBeDefined();
+    expect(parseSavedFilterQuery(created!)).toMatchObject({ search: "fresh", saved: false });
+    expect(listSavedFilters("u1", "tasks")).toHaveLength(1);
+  });
+});
+
 describe("deleteSavedFilter", () => {
   it("deletes the caller's own filter", () => {
     const created = upsertAppliedFilter(baseInput());

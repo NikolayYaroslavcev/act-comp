@@ -59,3 +59,14 @@ export function areTaskFilterCriteriaEqual(a: TaskFilterCriteria, b: TaskFilterC
 export function parseSavedFilterQuery(filter: SavedFilter): SavedFilterQuery {
   return savedFilterQuerySchema.parse(filter.query);
 }
+
+/**
+ * Same as parseSavedFilterQuery, but for call sites that iterate over
+ * potentially arbitrary/legacy persisted records (as opposed to records this
+ * feature just wrote itself) — returns null instead of throwing so a
+ * malformed record can be skipped rather than crashing the caller.
+ */
+export function safeParseSavedFilterQuery(filter: SavedFilter): SavedFilterQuery | null {
+  const result = savedFilterQuerySchema.safeParse(filter.query);
+  return result.success ? result.data : null;
+}

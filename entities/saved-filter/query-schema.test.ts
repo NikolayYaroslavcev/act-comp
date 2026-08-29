@@ -4,6 +4,7 @@ import {
   EMPTY_TASK_FILTER_CRITERIA,
   normalizeTaskFilterCriteria,
   parseSavedFilterQuery,
+  safeParseSavedFilterQuery,
   savedFilterQuerySchema,
   taskFilterCriteriaSchema,
   type TaskFilterCriteria,
@@ -89,5 +90,29 @@ describe("parseSavedFilterQuery", () => {
       usedAt: "2026-08-01T00:00:00.000Z",
     };
     expect(parseSavedFilterQuery(filter)).toEqual({ ...EMPTY_TASK_FILTER_CRITERIA, saved: true, label: "Mine" });
+  });
+});
+
+describe("safeParseSavedFilterQuery", () => {
+  it("returns null for a SavedFilter whose query does not match the schema", () => {
+    const filter: SavedFilter = {
+      id: "f1",
+      userId: "u1",
+      scope: "tasks",
+      query: { status: ["new", "in_progress"], priority: { min: 3 } },
+      usedAt: "2026-08-01T00:00:00.000Z",
+    };
+    expect(safeParseSavedFilterQuery(filter)).toBeNull();
+  });
+
+  it("returns the parsed data for a valid SavedFilter", () => {
+    const filter: SavedFilter = {
+      id: "f1",
+      userId: "u1",
+      scope: "tasks",
+      query: { ...EMPTY_TASK_FILTER_CRITERIA, saved: true, label: "Mine" },
+      usedAt: "2026-08-01T00:00:00.000Z",
+    };
+    expect(safeParseSavedFilterQuery(filter)).toEqual({ ...EMPTY_TASK_FILTER_CRITERIA, saved: true, label: "Mine" });
   });
 });

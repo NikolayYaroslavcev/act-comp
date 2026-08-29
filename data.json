@@ -1,0 +1,653 @@
+{
+  "users": {
+    "u1": {
+      "id": "u1",
+      "email": "admin@example.com",
+      "passwordHash": "demo:Admin123!",
+      "settings": {
+        "theme": "system",
+        "workDayHours": 8,
+        "notifications": {
+          "deadlineReminders": true,
+          "timeThresholdAlerts": true,
+          "workHoursRecalculation": true,
+          "otherUserChanges": true
+        },
+        "taskDefaults": {
+          "priority": 3,
+          "category": "General",
+          "estimatedMin": 60
+        }
+      }
+    },
+    "u2": {
+      "id": "u2",
+      "email": "user@example.com",
+      "passwordHash": "demo:User123!",
+      "settings": {
+        "theme": "light",
+        "workDayHours": 6,
+        "notifications": {
+          "deadlineReminders": true,
+          "timeThresholdAlerts": false,
+          "workHoursRecalculation": true,
+          "otherUserChanges": false
+        },
+        "taskDefaults": {
+          "priority": 2,
+          "category": null,
+          "estimatedMin": 30
+        }
+      }
+    },
+    "u3": {
+      "id": "u3",
+      "email": "guest@example.com",
+      "passwordHash": "demo:Guest123!",
+      "settings": {
+        "theme": "dark",
+        "workDayHours": 8,
+        "notifications": {
+          "deadlineReminders": false,
+          "timeThresholdAlerts": false,
+          "workHoursRecalculation": false,
+          "otherUserChanges": true
+        },
+        "taskDefaults": {
+          "priority": 1,
+          "category": "Personal",
+          "estimatedMin": 15
+        }
+      }
+    }
+  },
+  "sessions": {
+    "s1": {
+      "id": "s1",
+      "userId": "u1",
+      "ip": "192.0.2.10 (demo)",
+      "device": "Chrome on Windows",
+      "createdAt": "2026-08-27T08:00:00.000Z",
+      "rememberMe": true,
+      "revokedAt": null
+    },
+    "s2": {
+      "id": "s2",
+      "userId": "u1",
+      "ip": "192.0.2.11 (demo)",
+      "device": "Safari on iPhone",
+      "createdAt": "2026-08-20T10:15:00.000Z",
+      "rememberMe": false,
+      "revokedAt": "2026-08-20T18:00:00.000Z"
+    },
+    "s3": {
+      "id": "s3",
+      "userId": "u2",
+      "ip": "192.0.2.20 (demo)",
+      "device": "Firefox on macOS",
+      "createdAt": "2026-08-26T14:30:00.000Z",
+      "rememberMe": true,
+      "revokedAt": null
+    },
+    "s4": {
+      "id": "s4",
+      "userId": "u1",
+      "ip": "192.0.2.12 (demo)",
+      "device": "Edge on Windows",
+      "createdAt": "2026-08-15T09:00:00.000Z",
+      "rememberMe": false,
+      "revokedAt": null
+    }
+  },
+  "lists": {
+    "l1": {
+      "id": "l1",
+      "ownerId": "u1",
+      "title": "Спринт 34: Backend",
+      "template": "work",
+      "taskIds": ["t1", "t2", "t3", "t4", "t5", "t6", "t7"],
+      "deadline": "2026-09-10T18:00:00.000Z",
+      "sharedWith": [{ "userId": "u2", "access": "edit" }],
+      "history": [
+        {
+          "field": "title",
+          "old": "Sprint 34",
+          "new": "Спринт 34: Backend",
+          "at": "2026-08-21T10:00:00.000Z",
+          "byUserId": "u1"
+        }
+      ],
+      "deletedAt": null,
+      "lastActivityAt": "2026-08-27T08:45:00.000Z"
+    },
+    "l2": {
+      "id": "l2",
+      "ownerId": "u1",
+      "title": "Личные дела",
+      "template": "personal",
+      "taskIds": ["t8", "t9"],
+      "deadline": null,
+      "sharedWith": [],
+      "history": [],
+      "deletedAt": null,
+      "lastActivityAt": "2026-08-25T12:00:00.000Z"
+    },
+    "l3": {
+      "id": "l3",
+      "ownerId": "u2",
+      "title": "Проект Феникс",
+      "template": "project",
+      "taskIds": ["t10", "t11"],
+      "deadline": "2026-09-01T00:00:00.000Z",
+      "sharedWith": [{ "userId": "u1", "access": "read" }],
+      "history": [
+        {
+          "field": "deadline",
+          "old": null,
+          "new": "2026-09-01T00:00:00.000Z",
+          "at": "2026-08-18T09:00:00.000Z",
+          "byUserId": "u2"
+        }
+      ],
+      "deletedAt": null,
+      "lastActivityAt": "2026-08-26T16:00:00.000Z"
+    },
+    "l4": {
+      "id": "l4",
+      "ownerId": "u1",
+      "title": "Старый список (удалён)",
+      "template": "work",
+      "taskIds": ["t13"],
+      "deadline": null,
+      "sharedWith": [],
+      "history": [],
+      "deletedAt": "2026-08-10T09:00:00.000Z",
+      "lastActivityAt": "2026-08-09T09:00:00.000Z"
+    },
+    "l5": {
+      "id": "l5",
+      "ownerId": "u1",
+      "title": "Заброшенный проект",
+      "template": "project",
+      "taskIds": ["t12"],
+      "deadline": null,
+      "sharedWith": [],
+      "history": [],
+      "deletedAt": null,
+      "lastActivityAt": "2026-06-01T09:00:00.000Z"
+    }
+  },
+  "tasks": {
+    "t1": {
+      "id": "t1",
+      "listId": "l1",
+      "code": "TEST-1",
+      "title": "Настроить CI pipeline",
+      "description": "Добавить GitHub Actions для линта и тестов",
+      "status": "in_progress",
+      "priority": 5,
+      "category": "Backend",
+      "tags": ["ci", "urgent"],
+      "dependsOn": [],
+      "parentId": null,
+      "subtaskIds": [],
+      "deadline": "2026-08-20T18:00:00.000Z",
+      "createdAt": "2026-08-10T09:00:00.000Z",
+      "estimatedMin": 480,
+      "timeSpentMin": 150,
+      "timerStartedAt": "2026-08-27T08:30:00.000Z",
+      "timerPausedAt": null,
+      "extensions": [{ "commentId": "c1", "addedMin": 90 }],
+      "history": [
+        {
+          "field": "status",
+          "old": "new",
+          "new": "in_progress",
+          "at": "2026-08-12T09:00:00.000Z",
+          "byUserId": "u1"
+        }
+      ],
+      "deletedAt": null
+    },
+    "t2": {
+      "id": "t2",
+      "listId": "l1",
+      "code": "TEST-2",
+      "title": "Старая задача (удалена)",
+      "description": "",
+      "status": "new",
+      "priority": 2,
+      "category": "Backend",
+      "tags": [],
+      "dependsOn": [],
+      "parentId": null,
+      "subtaskIds": [],
+      "deadline": null,
+      "createdAt": "2026-08-10T09:05:00.000Z",
+      "estimatedMin": 60,
+      "timeSpentMin": 0,
+      "timerStartedAt": null,
+      "timerPausedAt": null,
+      "extensions": [],
+      "history": [],
+      "deletedAt": "2026-08-14T11:00:00.000Z"
+    },
+    "t3": {
+      "id": "t3",
+      "listId": "l1",
+      "code": "TEST-3",
+      "title": "Ревью API контрактов",
+      "description": "Проверить схему после CI",
+      "status": "new",
+      "priority": 3,
+      "category": "Backend",
+      "tags": ["review"],
+      "dependsOn": ["t1"],
+      "parentId": null,
+      "subtaskIds": ["t5", "t6"],
+      "deadline": "2026-08-29T18:00:00.000Z",
+      "createdAt": "2026-08-11T09:00:00.000Z",
+      "estimatedMin": 120,
+      "timeSpentMin": 0,
+      "timerStartedAt": null,
+      "timerPausedAt": null,
+      "extensions": [],
+      "history": [],
+      "deletedAt": null
+    },
+    "t4": {
+      "id": "t4",
+      "listId": "l1",
+      "code": "TEST-4",
+      "title": "Обновить документацию README",
+      "description": "Описать новые эндпоинты",
+      "status": "done",
+      "priority": 2,
+      "category": "Docs",
+      "tags": ["docs"],
+      "dependsOn": [],
+      "parentId": null,
+      "subtaskIds": [],
+      "deadline": "2026-08-18T18:00:00.000Z",
+      "createdAt": "2026-08-09T09:00:00.000Z",
+      "estimatedMin": 90,
+      "timeSpentMin": 95,
+      "timerStartedAt": null,
+      "timerPausedAt": null,
+      "extensions": [],
+      "history": [
+        {
+          "field": "status",
+          "old": "in_progress",
+          "new": "done",
+          "at": "2026-08-17T15:00:00.000Z",
+          "byUserId": "u2"
+        }
+      ],
+      "deletedAt": null
+    },
+    "t5": {
+      "id": "t5",
+      "listId": "l1",
+      "code": "TEST-5",
+      "title": "Подзадача: unit-тесты",
+      "description": "",
+      "status": "done",
+      "priority": 3,
+      "category": "Backend",
+      "tags": [],
+      "dependsOn": [],
+      "parentId": "t3",
+      "subtaskIds": [],
+      "deadline": null,
+      "createdAt": "2026-08-12T09:00:00.000Z",
+      "estimatedMin": 60,
+      "timeSpentMin": 55,
+      "timerStartedAt": null,
+      "timerPausedAt": null,
+      "extensions": [],
+      "history": [],
+      "deletedAt": null
+    },
+    "t6": {
+      "id": "t6",
+      "listId": "l1",
+      "code": "TEST-6",
+      "title": "Подзадача: интеграционные тесты",
+      "description": "",
+      "status": "new",
+      "priority": 3,
+      "category": "Backend",
+      "tags": [],
+      "dependsOn": ["t5"],
+      "parentId": "t3",
+      "subtaskIds": [],
+      "deadline": null,
+      "createdAt": "2026-08-12T09:05:00.000Z",
+      "estimatedMin": 90,
+      "timeSpentMin": 0,
+      "timerStartedAt": null,
+      "timerPausedAt": null,
+      "extensions": [],
+      "history": [],
+      "deletedAt": null
+    },
+    "t7": {
+      "id": "t7",
+      "listId": "l1",
+      "code": "TEST-7",
+      "title": "Идея: кэширование ответов",
+      "description": "Бэклог, приоритет не срочный",
+      "status": "new",
+      "priority": 1,
+      "category": "Backend",
+      "tags": ["backlog"],
+      "dependsOn": [],
+      "parentId": null,
+      "subtaskIds": [],
+      "deadline": null,
+      "createdAt": "2026-08-13T09:00:00.000Z",
+      "estimatedMin": 0,
+      "timeSpentMin": 0,
+      "timerStartedAt": null,
+      "timerPausedAt": null,
+      "extensions": [],
+      "history": [],
+      "deletedAt": null
+    },
+    "t8": {
+      "id": "t8",
+      "listId": "l2",
+      "code": "TEST-1",
+      "title": "Купить продукты",
+      "description": "",
+      "status": "new",
+      "priority": 2,
+      "category": "Личное",
+      "tags": ["shopping"],
+      "dependsOn": [],
+      "parentId": null,
+      "subtaskIds": [],
+      "deadline": "2026-09-15T18:00:00.000Z",
+      "createdAt": "2026-08-20T09:00:00.000Z",
+      "estimatedMin": 30,
+      "timeSpentMin": 0,
+      "timerStartedAt": null,
+      "timerPausedAt": null,
+      "extensions": [],
+      "history": [],
+      "deletedAt": null
+    },
+    "t9": {
+      "id": "t9",
+      "listId": "l2",
+      "code": "TEST-2",
+      "title": "Оплатить коммунальные услуги",
+      "description": "",
+      "status": "in_progress",
+      "priority": 4,
+      "category": "Личное",
+      "tags": ["bills"],
+      "dependsOn": [],
+      "parentId": null,
+      "subtaskIds": [],
+      "deadline": "2026-08-22T18:00:00.000Z",
+      "createdAt": "2026-08-18T09:00:00.000Z",
+      "estimatedMin": 20,
+      "timeSpentMin": 10,
+      "timerStartedAt": null,
+      "timerPausedAt": "2026-08-22T10:00:00.000Z",
+      "extensions": [{ "commentId": "c3", "addedMin": 135 }],
+      "history": [
+        {
+          "field": "priority",
+          "old": 2,
+          "new": 4,
+          "at": "2026-08-21T09:00:00.000Z",
+          "byUserId": "u1"
+        }
+      ],
+      "deletedAt": null
+    },
+    "t10": {
+      "id": "t10",
+      "listId": "l3",
+      "code": "TEST-1",
+      "title": "Собрать команду",
+      "description": "",
+      "status": "done",
+      "priority": 3,
+      "category": "Management",
+      "tags": [],
+      "dependsOn": [],
+      "parentId": null,
+      "subtaskIds": [],
+      "deadline": "2026-08-15T18:00:00.000Z",
+      "createdAt": "2026-08-05T09:00:00.000Z",
+      "estimatedMin": 120,
+      "timeSpentMin": 100,
+      "timerStartedAt": null,
+      "timerPausedAt": null,
+      "extensions": [],
+      "history": [],
+      "deletedAt": null
+    },
+    "t11": {
+      "id": "t11",
+      "listId": "l3",
+      "code": "TEST-2",
+      "title": "Подготовить бюджет",
+      "description": "",
+      "status": "in_progress",
+      "priority": 4,
+      "category": "Management",
+      "tags": ["finance"],
+      "dependsOn": [],
+      "parentId": null,
+      "subtaskIds": [],
+      "deadline": "2026-08-30T18:00:00.000Z",
+      "createdAt": "2026-08-10T09:00:00.000Z",
+      "estimatedMin": 180,
+      "timeSpentMin": 40,
+      "timerStartedAt": null,
+      "timerPausedAt": null,
+      "extensions": [],
+      "history": [],
+      "deletedAt": null
+    },
+    "t12": {
+      "id": "t12",
+      "listId": "l5",
+      "code": "TEST-1",
+      "title": "Начальное исследование рынка",
+      "description": "",
+      "status": "done",
+      "priority": 2,
+      "category": "Research",
+      "tags": [],
+      "dependsOn": [],
+      "parentId": null,
+      "subtaskIds": [],
+      "deadline": "2026-06-01T18:00:00.000Z",
+      "createdAt": "2026-05-20T09:00:00.000Z",
+      "estimatedMin": 240,
+      "timeSpentMin": 220,
+      "timerStartedAt": null,
+      "timerPausedAt": null,
+      "extensions": [],
+      "history": [],
+      "deletedAt": null
+    },
+    "t13": {
+      "id": "t13",
+      "listId": "l4",
+      "code": "TEST-1",
+      "title": "Задача из удалённого списка",
+      "description": "",
+      "status": "new",
+      "priority": 2,
+      "category": null,
+      "tags": [],
+      "dependsOn": [],
+      "parentId": null,
+      "subtaskIds": [],
+      "deadline": null,
+      "createdAt": "2026-08-01T09:00:00.000Z",
+      "estimatedMin": 0,
+      "timeSpentMin": 0,
+      "timerStartedAt": null,
+      "timerPausedAt": null,
+      "extensions": [],
+      "history": [],
+      "deletedAt": "2026-08-10T09:00:00.000Z"
+    }
+  },
+  "comments": {
+    "c1": {
+      "id": "c1",
+      "taskId": "t1",
+      "authorId": "u1",
+      "text": "Продлеваю дедлайн из-за блокера с CI %1h30m%",
+      "createdAt": "2026-08-19T14:00:00.000Z"
+    },
+    "c2": {
+      "id": "c2",
+      "taskId": "t3",
+      "authorId": "u2",
+      "text": "Жду когда разблокируется TEST-1",
+      "createdAt": "2026-08-22T10:00:00.000Z"
+    },
+    "c3": {
+      "id": "c3",
+      "taskId": "t9",
+      "authorId": "u1",
+      "text": "Продлеваю оплату, ждём подтверждение от банка %2h 15m%",
+      "createdAt": "2026-08-22T09:30:00.000Z"
+    },
+    "c4": {
+      "id": "c4",
+      "taskId": "t4",
+      "authorId": "u2",
+      "text": "Документация готова, можно ревьюить",
+      "createdAt": "2026-08-17T15:05:00.000Z"
+    },
+    "c5": {
+      "id": "c5",
+      "taskId": "t6",
+      "authorId": "u2",
+      "text": "Нужны фикстуры для интеграционных тестов",
+      "createdAt": "2026-08-26T11:00:00.000Z"
+    }
+  },
+  "activityLog": {
+    "a1": {
+      "id": "a1",
+      "entityType": "list",
+      "entityId": "l1",
+      "action": "created",
+      "at": "2026-08-10T08:55:00.000Z",
+      "byUserId": "u1"
+    },
+    "a2": {
+      "id": "a2",
+      "entityType": "task",
+      "entityId": "t1",
+      "action": "status_changed",
+      "at": "2026-08-12T09:00:00.000Z",
+      "byUserId": "u1"
+    },
+    "a3": {
+      "id": "a3",
+      "entityType": "task",
+      "entityId": "t2",
+      "action": "deleted",
+      "at": "2026-08-14T11:00:00.000Z",
+      "byUserId": "u1"
+    },
+    "a4": {
+      "id": "a4",
+      "entityType": "task",
+      "entityId": "t1",
+      "action": "commented",
+      "at": "2026-08-19T14:00:00.000Z",
+      "byUserId": "u1"
+    },
+    "a5": {
+      "id": "a5",
+      "entityType": "list",
+      "entityId": "l1",
+      "action": "shared",
+      "at": "2026-08-15T09:00:00.000Z",
+      "byUserId": "u1"
+    },
+    "a6": {
+      "id": "a6",
+      "entityType": "task",
+      "entityId": "t4",
+      "action": "status_changed",
+      "at": "2026-08-17T15:00:00.000Z",
+      "byUserId": "u2"
+    },
+    "a7": {
+      "id": "a7",
+      "entityType": "list",
+      "entityId": "l4",
+      "action": "deleted",
+      "at": "2026-08-10T09:00:00.000Z",
+      "byUserId": "u1"
+    },
+    "a8": {
+      "id": "a8",
+      "entityType": "task",
+      "entityId": "t9",
+      "action": "time_extended",
+      "at": "2026-08-22T09:30:00.000Z",
+      "byUserId": "u1"
+    }
+  },
+  "savedFilters": {
+    "f1": {
+      "id": "f1",
+      "userId": "u1",
+      "scope": "tasks",
+      "query": {
+        "search": "",
+        "status": ["new", "in_progress"],
+        "category": null,
+        "tags": [],
+        "priorityMin": 3,
+        "priorityMax": null,
+        "deadlineFrom": null,
+        "deadlineTo": null,
+        "saved": true,
+        "label": "Активные с высоким приоритетом"
+      },
+      "usedAt": "2026-08-27T08:00:00.000Z"
+    },
+    "f2": {
+      "id": "f2",
+      "userId": "u1",
+      "scope": "lists",
+      "query": { "template": "work" },
+      "usedAt": "2026-08-25T10:00:00.000Z"
+    },
+    "f3": {
+      "id": "f3",
+      "userId": "u2",
+      "scope": "tasks",
+      "query": {
+        "search": "бюджет",
+        "status": [],
+        "category": null,
+        "tags": [],
+        "priorityMin": null,
+        "priorityMax": null,
+        "deadlineFrom": null,
+        "deadlineTo": null,
+        "saved": false,
+        "label": null
+      },
+      "usedAt": "2026-08-26T16:00:00.000Z"
+    }
+  }
+}

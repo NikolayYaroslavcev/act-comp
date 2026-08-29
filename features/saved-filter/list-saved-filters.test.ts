@@ -31,4 +31,23 @@ describe("listSavedFiltersForUser", () => {
     expect(groups.recent).toHaveLength(0);
     expect(groups.saved).toHaveLength(0);
   });
+
+  it("excludes a legacy-shaped record from both recent and saved without throwing", () => {
+    getDb().savedFilters.legacy = {
+      id: "legacy",
+      userId: "u1",
+      scope: "tasks",
+      query: { status: ["new", "in_progress"], priority: { min: 3 } },
+      usedAt: "2026-08-01T00:00:00.000Z",
+    };
+    upsertAppliedFilter({ userId: "u1", scope: "tasks", criteria: EMPTY_TASK_FILTER_CRITERIA, saved: false, label: null });
+
+    let groups: ReturnType<typeof listSavedFiltersForUser> | undefined;
+    expect(() => {
+      groups = listSavedFiltersForUser("u1", "tasks");
+    }).not.toThrow();
+
+    expect(groups!.recent.some((filter) => filter.id === "legacy")).toBe(false);
+    expect(groups!.saved.some((filter) => filter.id === "legacy")).toBe(false);
+  });
 });
