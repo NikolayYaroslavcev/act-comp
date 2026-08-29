@@ -400,3 +400,65 @@ describe("TaskList search and filters", () => {
     expect(dialog).toHaveTextContent("Deploy service");
   });
 });
+
+describe("TaskList Kanban view", () => {
+  it("keeps the list view by default and switches to Kanban on demand", async () => {
+    const user = userEvent.setup();
+    render(<TaskList tasks={[makeTask({ id: "t1", title: "First" })]} now={NOW} />);
+
+    expect(screen.getByTestId("task-list")).toBeInTheDocument();
+    expect(screen.queryByTestId("kanban-board")).not.toBeInTheDocument();
+
+    await user.click(screen.getByTestId("task-view-kanban"));
+
+    expect(screen.getByTestId("kanban-board")).toBeInTheDocument();
+    expect(screen.queryByTestId("task-list")).not.toBeInTheDocument();
+    expect(screen.getByText("First")).toBeInTheDocument();
+  });
+
+  it("applies search filters to Kanban cards", async () => {
+    const user = userEvent.setup();
+    render(
+      <TaskList
+        tasks={[
+          makeTask({ id: "t1", title: "Deploy service" }),
+          makeTask({ id: "t2", title: "Write docs" }),
+        ]}
+        now={NOW}
+      />,
+    );
+
+    await user.click(screen.getByTestId("task-view-kanban"));
+    await user.type(screen.getByTestId("task-filters-search"), "deploy");
+    await user.click(screen.getByTestId("task-filters-apply"));
+
+    expect(screen.getByTestId("kanban-card")).toHaveTextContent("Deploy service");
+    expect(screen.queryByText("Write docs")).not.toBeInTheDocument();
+  });
+
+  it("opens the existing task detail from a Kanban card", async () => {
+    const user = userEvent.setup();
+    render(<TaskList tasks={[makeTask({ id: "t1", code: "TEST-1", title: "First" })]} now={NOW} />);
+
+    await user.click(screen.getByTestId("task-view-kanban"));
+    await user.click(screen.getByTestId("kanban-card-open"));
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent("TEST-1");
+    expect(dialog).toHaveTextContent("First");
+  });
+
+  it("reflects a Kanban status change in the list view without reload", async () => {
+    const user = userEvent.setup();
+    const updated = makeTask({ id: "t1", code: "TEST-1", title: "Task", status: "in_progress" });
+    stubFetchForTaskAction(() => jsonResponse(200, { data: { task: updated, cascade: [] } }));
+    render(<TaskList tasks={[makeTask({ id: "t1", code: "TEST-1", title: "Task", status: "new" })]} now={NOW} canEdit />);
+
+    await user.click(screen.getByTestId("task-view-kanban"));
+    await user.selectOptions(screen.getByTestId("kanban-status-select"), "in_progress");
+    await waitFor(() => expect(screen.getByTestId("task-status")).toHaveTextContent("В работе"));
+
+    await user.click(screen.getByTestId("task-view-list"));
+    expect(screen.getByTestId("task-status")).toHaveTextContent("В работе");
+  });
+});

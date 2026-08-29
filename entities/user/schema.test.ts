@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { userSchema } from "@/entities/user/schema";
+import { DEFAULT_SETTINGS, settingsSchema, userSchema } from "@/entities/user/schema";
 
 const validUser = {
   id: "u1",
@@ -30,6 +30,10 @@ describe("userSchema", () => {
   it("rejects an invalid email", () => {
     const result = userSchema.safeParse({ ...validUser, email: "not-an-email" });
     expect(result.success).toBe(false);
+  });
+
+  it("accepts DEFAULT_SETTINGS-shaped values", () => {
+    expect(settingsSchema.safeParse(DEFAULT_SETTINGS).success).toBe(true);
   });
 
   it("rejects an unknown theme", () => {

@@ -101,4 +101,32 @@ describe("createFileDbStore", () => {
 
     expect(reader.getDb().lists.l1.sharedWith).toContainEqual({ userId: "u3", access: "read" });
   });
+
+  it("makes a user settings write visible to an independently constructed instance", () => {
+    const filePath = tempFilePath();
+    const writer = createFileDbStore(filePath);
+    const reader = createFileDbStore(filePath);
+
+    const db = writer.getDb();
+    db.users.u1 = {
+      ...db.users.u1,
+      settings: { ...db.users.u1.settings, theme: "dark" },
+    };
+    writer.saveDb(db);
+
+    expect(reader.getDb().users.u1.settings.theme).toBe("dark");
+    expect(reader.getDb().users.u1.settings.workDayHours).toBe(8);
+  });
+
+  it("makes notification acks visible to an independently constructed instance", () => {
+    const filePath = tempFilePath();
+    const writer = createFileDbStore(filePath);
+    const reader = createFileDbStore(filePath);
+
+    const db = writer.getDb();
+    db.notificationAcks = { u1: ["time_threshold:t1:75"] };
+    writer.saveDb(db);
+
+    expect(reader.getDb().notificationAcks.u1).toEqual(["time_threshold:t1:75"]);
+  });
 });

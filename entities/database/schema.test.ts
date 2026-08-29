@@ -17,6 +17,7 @@ describe("databaseSchema", () => {
     expect(Object.keys(db.comments).length).toBeGreaterThan(0);
     expect(Object.keys(db.activityLog).length).toBeGreaterThan(0);
     expect(Object.keys(db.savedFilters).length).toBeGreaterThan(0);
+    expect(db.notificationAcks).toEqual({});
   });
 
   it("has a soft-deleted list and a soft-deleted task", () => {

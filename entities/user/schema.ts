@@ -35,3 +35,19 @@ export type NotificationSettings = z.infer<typeof notificationSettingsSchema>;
 export type TaskDefaults = z.infer<typeof taskDefaultsSchema>;
 export type Settings = z.infer<typeof settingsSchema>;
 export type User = z.infer<typeof userSchema>;
+
+export const DEFAULT_SETTINGS: Settings = {
+  theme: "system",
+  workDayHours: 8,
+  notifications: {
+    deadlineReminders: true,
+    timeThresholdAlerts: true,
+    workHoursRecalculation: true,
+    otherUserChanges: true,
+  },
+  taskDefaults: {
+    priority: 3,
+    category: null,
+    estimatedMin: 60,
+  },
+};

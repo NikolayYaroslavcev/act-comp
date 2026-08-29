@@ -15,6 +15,7 @@ export const databaseSchema = z.object({
   comments: z.record(z.string(), commentSchema),
   activityLog: z.record(z.string(), activitySchema),
   savedFilters: z.record(z.string(), savedFilterSchema),
+  notificationAcks: z.record(z.string(), z.array(z.string())).default({}),
 });
 
 export type Database = z.infer<typeof databaseSchema>;

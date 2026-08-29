@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createTaskInputSchema, updateTaskInputSchema } from "@/entities/task/requests";
+import { createTaskInputSchema, timerActionInputSchema, updateTaskInputSchema } from "@/entities/task/requests";
 
 describe("createTaskInputSchema", () => {
   it("applies defaults for optional fields", () => {
@@ -84,11 +84,41 @@ describe("updateTaskInputSchema", () => {
       createdAt: "2020-01-01T00:00:00.000Z",
       history: [{ field: "title", old: "a", new: "b", at: "2020-01-01T00:00:00.000Z", byUserId: "u1" }],
       deletedAt: "2020-01-01T00:00:00.000Z",
+      timeSpentMin: 999,
+      timerStartedAt: "2020-01-01T00:00:00.000Z",
+      timerPausedAt: "2020-01-01T00:00:00.000Z",
     });
 
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data).toEqual({ title: "Task" });
     }
+  });
+});
+
+describe("timerActionInputSchema", () => {
+  it("accepts each timer action", () => {
+    for (const action of ["start", "pause", "resume", "stop"] as const) {
+      const result = timerActionInputSchema.safeParse({ action });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toEqual({ action });
+      }
+    }
+  });
+
+  it("rejects an unknown action", () => {
+    expect(timerActionInputSchema.safeParse({ action: "reset" }).success).toBe(false);
+  });
+
+  it("rejects client-supplied timestamps and spent time", () => {
+    const result = timerActionInputSchema.safeParse({
+      action: "start",
+      timerStartedAt: "2020-01-01T00:00:00.000Z",
+      timerPausedAt: "2020-01-01T00:00:00.000Z",
+      timeSpentMin: 40,
+    });
+
+    expect(result.success).toBe(false);
   });
 });

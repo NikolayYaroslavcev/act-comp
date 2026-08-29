@@ -94,6 +94,7 @@ describe("proxy", () => {
     it("runs on application routes", () => {
       expect(unstable_doesMiddlewareMatch({ config, url: "/" })).toBe(true);
       expect(unstable_doesMiddlewareMatch({ config, url: "/dashboard" })).toBe(true);
+      expect(unstable_doesMiddlewareMatch({ config, url: "/settings" })).toBe(true);
     });
   });
 });

@@ -41,7 +41,7 @@ export function ListDetail({ list, tasks, currentUserId, now = new Date() }: Lis
   const deadlineOverdue = isListDeadlineOverdue(list, now);
 
   return (
-    <div className="flex w-full flex-col gap-6">
+    <div className="flex w-full min-w-0 flex-col gap-6">
       <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex flex-col gap-1.5">

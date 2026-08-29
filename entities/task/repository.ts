@@ -1,8 +1,9 @@
 import { getDb, saveDb } from "@/shared/lib/db";
 import type { Database } from "@/entities/database/schema";
 import type { Task } from "@/entities/task/schema";
-import type { CreateTaskInput, UpdateTaskInput } from "@/entities/task/requests";
+import type { CreateTaskInput, TimerAction, UpdateTaskInput } from "@/entities/task/requests";
 import {
+  applyTimerAction,
   buildDuplicatedTasks,
   buildTaskDeletionHistoryEntry,
   buildTaskRestorationHistoryEntry,
@@ -252,4 +253,33 @@ export function restoreTask(id: string, userId: string, now: Date = new Date()):
 
   saveDb(db);
   return { status: "ok", task: updated };
+}
+
+export type ApplyTaskTimerOutcome =
+  | { status: "not_found" }
+  | { status: "completed" }
+  | { status: "deleted" }
+  | { status: "invalid_transition" }
+  | { status: "ok"; task: Task };
+
+export function applyTaskTimer(
+  id: string,
+  userId: string,
+  action: TimerAction,
+  now: Date = new Date(),
+): ApplyTaskTimerOutcome {
+  const db = getDb();
+  const existing = db.tasks[id];
+  if (!existing) {
+    return { status: "not_found" };
+  }
+
+  const result = applyTimerAction(existing, action, now, userId);
+  if (result.status !== "ok") {
+    return result;
+  }
+
+  db.tasks[id] = result.task;
+  saveDb(db);
+  return result;
 }

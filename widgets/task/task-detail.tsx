@@ -11,6 +11,7 @@ import { Progress } from "@/shared/ui/progress";
 import { cn } from "@/shared/lib/utils";
 import { TaskEditForm } from "./task-edit-form";
 import { TaskComments } from "./task-comments";
+import { TaskTimer } from "./task-timer";
 
 interface TaskDetailProps {
   task: Task;
@@ -245,6 +246,8 @@ export function TaskDetail({
             )}
 
             <TaskComments taskId={task.id} canComment={canEdit} />
+
+            <TaskTimer task={task} canEdit={canEdit} onTaskUpdated={onTaskUpdated} />
 
             <div className="flex justify-end gap-2">
               <DialogClose

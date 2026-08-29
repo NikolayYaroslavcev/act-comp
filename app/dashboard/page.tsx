@@ -6,6 +6,7 @@ import { getSystemStats } from "@/features/dashboard/system-stats";
 import { getDashboardLists } from "@/features/dashboard/dashboard-lists";
 import { WelcomeScreen } from "@/widgets/dashboard/welcome-screen";
 import { ListsSection } from "@/widgets/dashboard/lists-section";
+import { AppNav } from "@/widgets/settings/app-nav";
 
 export default async function DashboardPage() {
   const cookieStore = await cookies();
@@ -21,6 +22,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex flex-1 flex-col items-center gap-8 bg-muted/40 px-4 py-12">
+      <AppNav />
       <WelcomeScreen user={current.user} stats={stats} />
       <div className="w-full max-w-5xl">
         <ListsSection lists={lists} />

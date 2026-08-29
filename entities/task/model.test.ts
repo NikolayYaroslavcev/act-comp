@@ -15,6 +15,7 @@ import {
   filterTasks,
   getCascadeUpdates,
   groupTasksByKanbanColumn,
+  applyKanbanStatusOverrides,
   isTaskBlocked,
   isTaskOverdue,
   KANBAN_STATUSES,
@@ -1419,5 +1420,33 @@ describe("groupTasksByKanbanColumn", () => {
     const low = makeTask({ id: "low", status: "new", priority: 1 });
     const high = makeTask({ id: "high", status: "new", priority: 5 });
     expect(groupTasksByKanbanColumn([low, high]).new.map((t) => t.id)).toEqual(["high", "low"]);
+  });
+
+  it("excludes soft-deleted tasks from every column", () => {
+    const active = makeTask({ id: "a", status: "new" });
+    const deleted = makeTask({
+      id: "b",
+      status: "new",
+      deletedAt: "2026-08-01T00:00:00.000Z",
+    });
+    expect(groupTasksByKanbanColumn([active, deleted]).new.map((t) => t.id)).toEqual(["a"]);
+  });
+});
+
+describe("applyKanbanStatusOverrides", () => {
+  it("applies a status override without mutating the original task", () => {
+    const task = makeTask({ id: "a", status: "new" });
+    const result = applyKanbanStatusOverrides([task], { a: "in_progress" });
+    expect(result[0].status).toBe("in_progress");
+    expect(task.status).toBe("new");
+  });
+
+  it("leaves tasks without an override unchanged", () => {
+    const a = makeTask({ id: "a", status: "new" });
+    const b = makeTask({ id: "b", status: "done" });
+    expect(applyKanbanStatusOverrides([a, b], { a: "in_progress" }).map((t) => t.status)).toEqual([
+      "in_progress",
+      "done",
+    ]);
   });
 });

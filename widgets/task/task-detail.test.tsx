@@ -726,3 +726,31 @@ describe("TaskDetail clone", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 });
+
+describe("TaskDetail timer", () => {
+  it("embeds the timer in view mode", () => {
+    render(<TaskDetail task={makeTask({})} dependencyCodes={[]} open onOpenChange={vi.fn()} canEdit />);
+
+    expect(screen.getByTestId("task-timer")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Запустить таймер" })).toBeEnabled();
+  });
+
+  it("does not show timer controls in edit mode", async () => {
+    const user = userEvent.setup();
+    render(<TaskDetail task={makeTask({})} dependencyCodes={[]} open onOpenChange={vi.fn()} canEdit />);
+
+    await user.click(screen.getByTestId("task-detail-edit"));
+
+    expect(screen.queryByTestId("task-timer")).not.toBeInTheDocument();
+    expect(screen.getByTestId("task-edit-form")).toBeInTheDocument();
+  });
+
+  it("keeps comments, clone and close available alongside the timer", () => {
+    render(<TaskDetail task={makeTask({})} dependencyCodes={[]} open onOpenChange={vi.fn()} canEdit />);
+
+    expect(screen.getByTestId("task-timer")).toBeInTheDocument();
+    expect(screen.getByTestId("task-comments")).toBeInTheDocument();
+    expect(screen.getByTestId("task-detail-clone")).toBeInTheDocument();
+    expect(screen.getByTestId("task-detail-close")).toBeInTheDocument();
+  });
+});

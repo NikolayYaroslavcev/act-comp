@@ -39,7 +39,7 @@ export default async function ListDetailPage({ params }: ListDetailPageProps) {
 
   return (
     <div className="flex flex-1 flex-col items-center gap-6 bg-muted/40 px-4 py-12">
-      <div className="w-full max-w-5xl">
+      <div className="w-full min-w-0 max-w-5xl">
         <Link
           href="/dashboard"
           className="mb-4 inline-block text-sm text-muted-foreground hover:text-foreground"

@@ -1,5 +1,5 @@
 import type { Task, TaskStatus } from "@/entities/task/schema";
-import type { UpdateTaskInput } from "@/entities/task/requests";
+import type { TimerAction, UpdateTaskInput } from "@/entities/task/requests";
 import type { HistoryEntry } from "@/entities/common/schema";
 
 export type TaskStatusCounts = Record<TaskStatus, number>;
@@ -447,10 +447,21 @@ export function sortTasksForKanbanColumn(tasks: Task[]): Task[] {
   });
 }
 
+export function applyKanbanStatusOverrides(
+  tasks: Task[],
+  overrides: Readonly<Record<string, TaskStatus>>,
+): Task[] {
+  return tasks.map((task) => {
+    const nextStatus = overrides[task.id];
+    return nextStatus === undefined ? task : { ...task, status: nextStatus };
+  });
+}
+
 export function groupTasksByKanbanColumn(tasks: Task[]): Record<TaskStatus, Task[]> {
   const groups = { new: [], in_progress: [], done: [] } as Record<TaskStatus, Task[]>;
+  const visible = tasks.filter((task) => task.deletedAt === null);
   for (const status of KANBAN_STATUSES) {
-    groups[status] = sortTasksForKanbanColumn(tasks.filter((task) => task.status === status));
+    groups[status] = sortTasksForKanbanColumn(visible.filter((task) => task.status === status));
   }
   return groups;
 }
@@ -589,4 +600,155 @@ export interface TaskQuery {
 
 export function applyTaskQuery(tasks: Task[], query: TaskQuery): Task[] {
   return filterTasks(searchTasks(tasks, query.search), query.filters);
+}
+
+const MS_PER_MINUTE = 60_000;
+
+export type TimerState = "stopped" | "running" | "paused";
+
+export type ApplyTimerActionOutcome =
+  | { status: "ok"; task: Task }
+  | { status: "completed" }
+  | { status: "deleted" }
+  | { status: "invalid_transition" };
+
+/**
+ * Running = an open session (`timerStartedAt` set, `timerPausedAt` cleared).
+ * Paused wins if `timerPausedAt` is set, even when `timerStartedAt` is also
+ * present, so UI/server never add wall-clock time on top of already-committed
+ * `timeSpentMin`. Stopped is both timestamps null.
+ */
+export function getTimerState(task: Pick<Task, "timerStartedAt" | "timerPausedAt">): TimerState {
+  if (task.timerPausedAt !== null) {
+    return "paused";
+  }
+  if (task.timerStartedAt !== null) {
+    return "running";
+  }
+  return "stopped";
+}
+
+export function elapsedMs(task: Pick<Task, "timeSpentMin" | "timerStartedAt" | "timerPausedAt">, now: Date): number {
+  const committedMs = task.timeSpentMin * MS_PER_MINUTE;
+  if (getTimerState(task) !== "running" || task.timerStartedAt === null) {
+    return committedMs;
+  }
+
+  const runningMs = now.getTime() - Date.parse(task.timerStartedAt);
+  return committedMs + Math.max(0, runningMs);
+}
+
+export function elapsedMinutes(
+  task: Pick<Task, "timeSpentMin" | "timerStartedAt" | "timerPausedAt">,
+  now: Date,
+): number {
+  return Math.floor(elapsedMs(task, now) / MS_PER_MINUTE);
+}
+
+export function estimateProgressPercent(elapsedMin: number, estimatedMin: number): number | null {
+  if (estimatedMin <= 0) {
+    return null;
+  }
+  return Math.min(100, Math.floor((elapsedMin * 100) / estimatedMin));
+}
+
+function pad2(value: number): string {
+  return String(value).padStart(2, "0");
+}
+
+export function formatElapsedClock(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${hours}:${pad2(minutes)}:${pad2(seconds)}`;
+}
+
+function commitRunningMinutes(task: Task, now: Date): number {
+  if (getTimerState(task) !== "running" || task.timerStartedAt === null) {
+    return task.timeSpentMin;
+  }
+  const extra = Math.floor(Math.max(0, now.getTime() - Date.parse(task.timerStartedAt)) / MS_PER_MINUTE);
+  return task.timeSpentMin + extra;
+}
+
+function appendTimerHistory(previous: Task, next: Task, byUserId: string, at: string): Task {
+  const fields = ["timeSpentMin", "timerStartedAt", "timerPausedAt"] as const;
+  const changes: HistoryEntry[] = [];
+  for (const field of fields) {
+    if (previous[field] === next[field]) {
+      continue;
+    }
+    changes.push({ field, old: previous[field], new: next[field], at, byUserId });
+  }
+  if (changes.length === 0) {
+    return previous;
+  }
+  return { ...next, history: [...previous.history, ...changes] };
+}
+
+/**
+ * Pure timer transition. `timeSpentMin` is committed minutes from completed
+ * (paused/stopped) sessions only; a running session is added with floor()
+ * on pause/stop so ticks never persist. Timestamps are always taken from
+ * `now`, never from the caller.
+ */
+export function applyTimerAction(task: Task, action: TimerAction, now: Date, byUserId: string): ApplyTimerActionOutcome {
+  if (task.deletedAt !== null) {
+    return { status: "deleted" };
+  }
+  if (task.status === "done") {
+    return { status: "completed" };
+  }
+
+  const state = getTimerState(task);
+  const at = now.toISOString();
+
+  if (action === "start") {
+    if (state !== "stopped") {
+      return { status: "invalid_transition" };
+    }
+    return { status: "ok", task: appendTimerHistory(task, { ...task, timerStartedAt: at, timerPausedAt: null }, byUserId, at) };
+  }
+
+  if (action === "pause") {
+    if (state === "stopped") {
+      return { status: "invalid_transition" };
+    }
+    if (state === "paused") {
+      return { status: "ok", task };
+    }
+    return {
+      status: "ok",
+      task: appendTimerHistory(
+        task,
+        { ...task, timeSpentMin: commitRunningMinutes(task, now), timerStartedAt: null, timerPausedAt: at },
+        byUserId,
+        at,
+      ),
+    };
+  }
+
+  if (action === "resume") {
+    if (state !== "paused") {
+      return { status: "invalid_transition" };
+    }
+    return { status: "ok", task: appendTimerHistory(task, { ...task, timerStartedAt: at, timerPausedAt: null }, byUserId, at) };
+  }
+
+  if (state === "stopped") {
+    return { status: "ok", task };
+  }
+  if (state === "paused") {
+    return { status: "ok", task: appendTimerHistory(task, { ...task, timerStartedAt: null, timerPausedAt: null }, byUserId, at) };
+  }
+  return {
+    status: "ok",
+    task: appendTimerHistory(
+      task,
+      { ...task, timeSpentMin: commitRunningMinutes(task, now), timerStartedAt: null, timerPausedAt: null },
+      byUserId,
+      at,
+    ),
+  };
 }

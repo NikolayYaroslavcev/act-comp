@@ -32,5 +32,10 @@ export const updateTaskInputSchema = z
     message: "At least one field must be provided",
   });
 
+export const timerActionInputSchema = z.strictObject({
+  action: z.enum(["start", "pause", "resume", "stop"]),
+});
+
 export type CreateTaskInput = z.infer<typeof createTaskInputSchema>;
 export type UpdateTaskInput = z.infer<typeof updateTaskInputSchema>;
+export type TimerAction = z.infer<typeof timerActionInputSchema>["action"];
