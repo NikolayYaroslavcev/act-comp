@@ -67,7 +67,7 @@ export function ListDetail({
               </Badge>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <ListHistoryDialog history={history} />
             <DuplicateListDialog list={{ id: list.id, title: list.title }} />
             {canManageListSharing(list, currentUserId) ? <ShareListDialog list={list} /> : null}
