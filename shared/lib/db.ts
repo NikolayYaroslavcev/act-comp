@@ -91,10 +91,15 @@ export function createFileDbStore(filePath: string): DbStore {
  * read-modify-write-the-whole-document semantics as `createFileDbStore`
  * (including the same no-locking, race-on-concurrent-write caveat), just
  * backed by Vercel's object storage instead of the local disk.
+ *
+ * `useCache: false` on reads is required, not optional: `get()` defaults to
+ * serving private blobs from Vercel's CDN cache, which can still return the
+ * pre-write version right after `saveDb` writes a change — a read
+ * immediately following a mutation would silently see stale data.
  */
 export function createBlobDbStore(pathname: string): DbStore {
   async function readAll(): Promise<Database> {
-    const result = await get(pathname, { access: "private" });
+    const result = await get(pathname, { access: "private", useCache: false });
 
     if (!result || result.statusCode !== 200) {
       const seeded = seedDb();

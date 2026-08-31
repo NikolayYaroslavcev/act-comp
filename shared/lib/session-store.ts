@@ -74,10 +74,16 @@ export function createFileSessionStore(filePath: string): SessionStore {
  * function invocation gets its own ephemeral filesystem — a session written
  * by the login route wouldn't otherwise be visible to the next request.
  * Same whole-document read-modify-write semantics as `createFileSessionStore`.
+ *
+ * `useCache: false` on reads is required, not optional: `get()` defaults to
+ * serving private blobs from Vercel's CDN cache, which can still return the
+ * pre-login version right after `putSession` writes a new session — the
+ * proxy's very next auth check would see a "valid" cookie for a session that
+ * doesn't exist yet as far as it's concerned.
  */
 export function createBlobSessionStore(pathname: string): SessionStore {
   async function readAll(): Promise<SessionsRecord> {
-    const result = await get(pathname, { access: "private" });
+    const result = await get(pathname, { access: "private", useCache: false });
 
     if (!result || result.statusCode !== 200) {
       const seeded = seedSessions();

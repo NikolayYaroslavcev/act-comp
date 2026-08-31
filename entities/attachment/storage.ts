@@ -71,7 +71,7 @@ export function createBlobAttachmentBlobStore(): AttachmentBlobStore {
       });
     },
     async read(taskId, attachmentId) {
-      const result = await get(pathname(taskId, attachmentId), { access: "private" });
+      const result = await get(pathname(taskId, attachmentId), { access: "private", useCache: false });
       if (!result || result.statusCode !== 200) {
         return undefined;
       }
