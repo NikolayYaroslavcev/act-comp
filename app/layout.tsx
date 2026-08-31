@@ -50,7 +50,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         />
         <StoreProvider>
           <ThemeSync theme={theme} />
-          <NotificationInbox crossTabSyncEnabled={current?.user.settings.notifications.otherUserChanges ?? false} />
+          {current ? (
+            <NotificationInbox crossTabSyncEnabled={current.user.settings.notifications.otherUserChanges} />
+          ) : null}
           <AppErrorBoundary>{children}</AppErrorBoundary>
         </StoreProvider>
       </body>
