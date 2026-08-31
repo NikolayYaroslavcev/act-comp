@@ -3,7 +3,7 @@ import { isoDateTimeSchema } from "@/entities/common/schema";
 import { listTemplateSchema, sharedAccessSchema } from "@/entities/list/schema";
 
 export const createListInputSchema = z.object({
-  title: z.string().min(1).max(200),
+  title: z.string().min(1, "Введите название списка").max(200, "Название не должно превышать 200 символов"),
   template: listTemplateSchema,
   deadline: isoDateTimeSchema.nullable().optional().default(null),
 });

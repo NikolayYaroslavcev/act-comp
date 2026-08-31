@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
-import { DELETE, PATCH } from "@/app/api/lists/[id]/route";
+import { DELETE, GET, PATCH } from "@/app/api/lists/[id]/route";
 import { SESSION_COOKIE_NAME } from "@/features/auth/session-cookie";
-import { createSession } from "@/entities/session/repository";
+import { createSession, revokeSession } from "@/entities/session/repository";
 import { createList, findListById } from "@/entities/list/repository";
 import { selectVisibleLists } from "@/entities/list/model";
 import { getArchiveCandidates } from "@/features/dashboard/archive-candidates";
@@ -59,6 +59,94 @@ function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
   });
 }
 
+function getRequest(id: string, sessionId: string | undefined) {
+  return new NextRequest(`http://localhost/api/lists/${id}`, {
+    headers: sessionId ? { cookie: `${SESSION_COOKIE_NAME}=${sessionId}` } : {},
+  });
+}
+
+function callGet(id: string, request: NextRequest) {
+  return GET(request, { params: Promise.resolve({ id }) });
+}
+
+describe("GET /api/lists/[id]", () => {
+  it("returns 401 when no session cookie is present", async () => {
+    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
+
+    const response = await callGet(list.id, getRequest(list.id, undefined));
+
+    expect(response.status).toBe(401);
+  });
+
+  it("returns 401 for a revoked session", async () => {
+    const session = sessionFor("u1", "70");
+    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
+    revokeSession(session.id);
+
+    const response = await callGet(list.id, getRequest(list.id, session.id));
+
+    expect(response.status).toBe(401);
+  });
+
+  it("returns 200 for the owner", async () => {
+    const session = sessionFor("u1", "71");
+    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
+
+    const response = await callGet(list.id, getRequest(list.id, session.id));
+
+    expect(response.status).toBe(200);
+    const json = await response.json();
+    expect(json.data.id).toBe(list.id);
+  });
+
+  it("returns 200 for a read-access shared user", async () => {
+    const viewer = sessionFor("u2", "72");
+    const list = createList("u1", { title: "Shared read", template: "work", deadline: null });
+    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "read" });
+
+    const response = await callGet(list.id, getRequest(list.id, viewer.id));
+
+    expect(response.status).toBe(200);
+  });
+
+  it("returns 200 for an edit-access shared user", async () => {
+    const editor = sessionFor("u2", "73");
+    const list = createList("u1", { title: "Shared edit", template: "work", deadline: null });
+    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "edit" });
+
+    const response = await callGet(list.id, getRequest(list.id, editor.id));
+
+    expect(response.status).toBe(200);
+  });
+
+  it("returns 404 for an unknown list id", async () => {
+    const session = sessionFor("u1", "74");
+
+    const response = await callGet("does-not-exist", getRequest("does-not-exist", session.id));
+
+    expect(response.status).toBe(404);
+  });
+
+  it("returns 404 instead of 403 for a private list owned by another user", async () => {
+    const stranger = sessionFor("u2", "75");
+    const list = createList("u1", { title: "Private", template: "work", deadline: null });
+
+    const response = await callGet(list.id, getRequest(list.id, stranger.id));
+
+    expect(response.status).toBe(404);
+  });
+
+  it("returns 404 for a soft-deleted list, even for its owner", async () => {
+    const session = sessionFor("u1", "76");
+    const list = createList("u1", { title: "Deleted", template: "work", deadline: null });
+    findListById(list.id)!.deletedAt = "2026-08-01T00:00:00.000Z";
+
+    const response = await callGet(list.id, getRequest(list.id, session.id));
+
+    expect(response.status).toBe(404);
+  });
+});
+
 describe("PATCH /api/lists/[id]", () => {
   it("returns 401 when no session cookie is present", async () => {
     const list = createList("u1", { title: "Old", template: "work", deadline: null });
@@ -105,13 +193,13 @@ describe("PATCH /api/lists/[id]", () => {
     expect(response.status).toBe(404);
   });
 
-  it("returns 403 when the caller does not own or share the list", async () => {
+  it("returns 404 instead of 403 for a private list the caller cannot view", async () => {
     const stranger = sessionFor("u2", "35");
     const list = createList("u1", { title: "Old", template: "work", deadline: null });
 
     const response = await callPatch(list.id, patchRequest(list.id, stranger.id, { title: "Hijacked" }));
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(404);
     expect(findListById(list.id)?.title).toBe("Old");
   });
 
@@ -215,13 +303,13 @@ describe("DELETE /api/lists/[id]", () => {
     expect(response.status).toBe(404);
   });
 
-  it("returns 403 when the caller does not own the list", async () => {
+  it("returns 404 instead of 403 for a private list the caller cannot view", async () => {
     const stranger = sessionFor("u2", "51");
     const list = createList("u1", { title: "Owned", template: "work", deadline: null });
 
     const response = await callDelete(list.id, deleteRequest(list.id, stranger.id));
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(404);
     expect(findListById(list.id)?.deletedAt).toBeNull();
   });
 
@@ -231,6 +319,16 @@ describe("DELETE /api/lists/[id]", () => {
     findListById(list.id)!.sharedWith.push({ userId: "u2", access: "edit" });
 
     const response = await callDelete(list.id, deleteRequest(list.id, editor.id));
+
+    expect(response.status).toBe(403);
+  });
+
+  it("returns 403 for a read-only shared user", async () => {
+    const viewer = sessionFor("u2", "52b");
+    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
+    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "read" });
+
+    const response = await callDelete(list.id, deleteRequest(list.id, viewer.id));
 
     expect(response.status).toBe(403);
   });

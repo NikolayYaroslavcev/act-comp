@@ -22,7 +22,7 @@ describe("restoreList use-case", () => {
 
     const result = restoreList("someone-else", list.id, new Date("2026-08-27T12:00:00.000Z"));
 
-    expect(result).toEqual({ status: "forbidden" });
+    expect(result).toEqual({ status: "not_found" });
   });
 
   it("returns not_found for an unknown list id", () => {

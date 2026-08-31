@@ -61,13 +61,13 @@ describe("POST /api/lists/[id]/duplicate", () => {
     expect(response.status).toBe(404);
   });
 
-  it("returns 403 when the caller has no relation to the source list", async () => {
+  it("returns 404 when the caller has no relation to the source list", async () => {
     const stranger = sessionFor("u2", "81");
     const list = createList("u1", { title: "Owned", template: "work", deadline: null });
 
     const response = await callDuplicate(list.id, duplicateRequest(list.id, stranger.id));
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(404);
   });
 
   it("returns 400 for invalid JSON", async () => {

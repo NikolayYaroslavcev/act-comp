@@ -5,7 +5,13 @@ import type { Task } from "@/entities/task/schema";
 import { tasksToCsv } from "@/shared/lib/export/csv";
 import { downloadBlob } from "@/shared/lib/export/download";
 import { exportFilename } from "@/shared/lib/export/filename";
-import { Button } from "@/shared/ui/button";
+import { buttonVariants } from "@/shared/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/shared/ui/dropdown-menu";
 
 interface ExportActionsProps {
   listId: string;
@@ -14,9 +20,12 @@ interface ExportActionsProps {
   lookupTasks?: Task[];
 }
 
+type PendingFormat = "pdf" | "xlsx" | null;
+
 export function ExportActions({ listId, listTitle, tasks, lookupTasks = tasks }: ExportActionsProps) {
-  const [isPending, setIsPending] = useState(false);
+  const [pendingFormat, setPendingFormat] = useState<PendingFormat>(null);
   const [error, setError] = useState<string | null>(null);
+  const isPending = pendingFormat !== null;
 
   function handleCsv() {
     try {
@@ -28,41 +37,70 @@ export function ExportActions({ listId, listTitle, tasks, lookupTasks = tasks }:
     }
   }
 
-  async function handlePdf() {
+  async function requestFile(
+    format: "pdf" | "xlsx",
+    errorMessage: string,
+    contentType: string,
+  ) {
     if (isPending) {
       return;
     }
-    setIsPending(true);
+    setPendingFormat(format);
     setError(null);
     try {
-      const response = await fetch(`/api/lists/${listId}/export/pdf`, {
+      const response = await fetch(`/api/lists/${listId}/export/${format}`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ taskIds: tasks.map((task) => task.id) }),
       });
       if (!response.ok) {
-        throw new Error("pdf export failed");
+        throw new Error(`${format} export failed`);
       }
       const copy = await response.arrayBuffer();
-      downloadBlob(new Blob([copy], { type: "application/pdf" }), exportFilename(listTitle, "pdf"));
+      downloadBlob(new Blob([copy], { type: contentType }), exportFilename(listTitle, format));
     } catch {
-      setError("Не удалось сформировать PDF. Попробуйте ещё раз");
+      setError(errorMessage);
     } finally {
-      setIsPending(false);
+      setPendingFormat(null);
     }
   }
 
   return (
     <div className="flex flex-col items-end gap-1.5" data-testid="list-export">
-      <div className="flex flex-wrap items-center justify-end gap-2">
-        <span className="text-sm text-muted-foreground">Экспорт</span>
-        <Button data-testid="list-export-csv" variant="outline" size="sm" disabled={isPending} onClick={handleCsv}>
-          CSV
-        </Button>
-        <Button data-testid="list-export-pdf" variant="outline" size="sm" disabled={isPending} onClick={() => void handlePdf()}>
-          {isPending ? "PDF…" : "PDF"}
-        </Button>
-      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          disabled={isPending}
+          data-testid="list-export-trigger"
+          className={buttonVariants({ variant: "outline", size: "sm" })}
+        >
+          {isPending ? "Экспорт…" : "Экспорт"}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem data-testid="list-export-csv" disabled={isPending} onClick={handleCsv}>
+            CSV
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            data-testid="list-export-pdf"
+            disabled={isPending}
+            onClick={() => void requestFile("pdf", "Не удалось сформировать PDF. Попробуйте ещё раз", "application/pdf")}
+          >
+            {pendingFormat === "pdf" ? "PDF…" : "PDF"}
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            data-testid="list-export-xlsx"
+            disabled={isPending}
+            onClick={() =>
+              void requestFile(
+                "xlsx",
+                "Не удалось сформировать Excel. Попробуйте ещё раз",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+              )
+            }
+          >
+            {pendingFormat === "xlsx" ? "Excel…" : "Excel"}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
       {error && (
         <p role="alert" className="text-xs text-destructive">
           {error}

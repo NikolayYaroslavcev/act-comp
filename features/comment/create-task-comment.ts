@@ -1,6 +1,7 @@
 import { findListById } from "@/entities/list/repository";
 import { canEditList, canViewList } from "@/entities/list/model";
-import { findTaskById } from "@/entities/task/repository";
+import { parseTimeExtension } from "@/entities/task/model";
+import { applyTaskExtension, findTaskById } from "@/entities/task/repository";
 import { createComment } from "@/entities/comment/repository";
 import { findUserById } from "@/entities/user/repository";
 import type { CreateCommentInput } from "@/entities/comment/requests";
@@ -35,5 +36,11 @@ export function createTaskCommentForUser(
   }
 
   const comment = createComment({ taskId, authorId: userId, text: input.text });
+
+  const extension = parseTimeExtension(input.text);
+  if (extension) {
+    applyTaskExtension(taskId, userId, { commentId: comment.id, addedMin: extension.addedMin });
+  }
+
   return { status: "ok", comment: { ...comment, authorEmail: findUserById(userId)?.email ?? userId } };
 }

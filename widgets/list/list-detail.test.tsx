@@ -1,10 +1,11 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ListDetail } from "./list-detail";
 import { downloadBlob } from "@/shared/lib/export/download";
 import type { TaskList } from "@/entities/list/schema";
 import type { Task } from "@/entities/task/schema";
+import { renderWithStore as render } from "@/shared/store/test-utils";
 
 vi.mock("@/shared/lib/export/download", () => ({
   downloadBlob: vi.fn(),
@@ -100,6 +101,40 @@ describe("ListDetail", () => {
     expect(screen.getByTestId("list-access-badge")).toHaveTextContent("Редактирование");
   });
 
+  it("shows a sharing control for the owner", () => {
+    render(<ListDetail list={makeList({ ownerId: "u1" })} tasks={[]} currentUserId="u1" now={NOW} />);
+    expect(screen.getByRole("button", { name: "Поделиться" })).toBeInTheDocument();
+  });
+
+  it("does not show owner-only sharing controls to a shared editor", () => {
+    const list = makeList({ ownerId: "u1", sharedWith: [{ userId: "u2", access: "edit" }] });
+    render(<ListDetail list={list} tasks={[]} currentUserId="u2" now={NOW} />);
+    expect(screen.queryByRole("button", { name: "Поделиться" })).not.toBeInTheDocument();
+  });
+
+  it("does not show owner-only sharing controls to a shared read-only viewer", () => {
+    const list = makeList({ ownerId: "u1", sharedWith: [{ userId: "u2", access: "read" }] });
+    render(<ListDetail list={list} tasks={[]} currentUserId="u2" now={NOW} />);
+    expect(screen.queryByRole("button", { name: "Поделиться" })).not.toBeInTheDocument();
+  });
+
+  it("lets the owner duplicate the list", () => {
+    render(<ListDetail list={makeList({ ownerId: "u1" })} tasks={[]} currentUserId="u1" now={NOW} />);
+    expect(screen.getByRole("button", { name: "Дублировать список «Спринт 34»" })).toBeInTheDocument();
+  });
+
+  it("lets a shared editor duplicate the list (per the backend permission contract, which only requires view access)", () => {
+    const list = makeList({ ownerId: "u1", sharedWith: [{ userId: "u2", access: "edit" }] });
+    render(<ListDetail list={list} tasks={[]} currentUserId="u2" now={NOW} />);
+    expect(screen.getByRole("button", { name: "Дублировать список «Спринт 34»" })).toBeInTheDocument();
+  });
+
+  it("lets a shared read-only viewer duplicate the list (per the backend permission contract, which only requires view access)", () => {
+    const list = makeList({ ownerId: "u1", sharedWith: [{ userId: "u2", access: "read" }] });
+    render(<ListDetail list={list} tasks={[]} currentUserId="u2" now={NOW} />);
+    expect(screen.getByRole("button", { name: "Дублировать список «Спринт 34»" })).toBeInTheDocument();
+  });
+
   it("shows the list deadline when set", () => {
     render(<ListDetail list={makeList({ deadline: "2026-09-01T00:00:00.000Z" })} tasks={[]} currentUserId="u1" now={NOW} />);
     expect(screen.queryByText("Без дедлайна")).not.toBeInTheDocument();
@@ -110,9 +145,11 @@ describe("ListDetail", () => {
     expect(screen.getByText("Без дедлайна")).toBeInTheDocument();
   });
 
-  it("shows export actions for the current list", () => {
+  it("shows export actions for the current list", async () => {
+    const user = userEvent.setup();
     render(<ListDetail list={makeList({})} tasks={[]} currentUserId="u1" now={NOW} />);
-    expect(screen.getByTestId("list-export-csv")).toBeInTheDocument();
+    await user.click(screen.getByTestId("list-export-trigger"));
+    expect(await screen.findByTestId("list-export-csv")).toBeInTheDocument();
     expect(screen.getByTestId("list-export-pdf")).toBeInTheDocument();
   });
 });
@@ -179,7 +216,8 @@ describe("ListDetail export of the current filtered view", () => {
 
     await user.type(screen.getByTestId("task-filters-search"), "backend");
     await user.click(screen.getByTestId("task-filters-apply"));
-    await user.click(screen.getByTestId("list-export-csv"));
+    await user.click(screen.getByTestId("list-export-trigger"));
+    await user.click(await screen.findByTestId("list-export-csv"));
 
     const text = await vi.mocked(downloadBlob).mock.calls[0][0].text();
     expect(text).toContain("backend api");

@@ -43,6 +43,20 @@ describe("taskFilterCriteriaSchema", () => {
   it("rejects a non-datetime deadlineFrom", () => {
     expect(taskFilterCriteriaSchema.safeParse(makeCriteria({ deadlineFrom: "not-a-date" })).success).toBe(false);
   });
+
+  it("strips saved-filter metadata so apply/save POST bodies stay valid", () => {
+    const result = taskFilterCriteriaSchema.safeParse({
+      ...EMPTY_TASK_FILTER_CRITERIA,
+      search: "deploy",
+      saved: true,
+      label: "Deploys",
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).toEqual({ ...EMPTY_TASK_FILTER_CRITERIA, search: "deploy" });
+      expect(result.data).not.toHaveProperty("saved");
+    }
+  });
 });
 
 describe("savedFilterQuerySchema", () => {

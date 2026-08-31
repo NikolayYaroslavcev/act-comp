@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { KanbanBoard } from "./kanban-board";
+import { chooseSelectOption } from "@/shared/test/ui";
 import type { Task } from "@/entities/task/schema";
 
 function jsonResponse(status: number, body: unknown) {
@@ -193,7 +194,7 @@ describe("KanbanBoard", () => {
       />,
     );
 
-    await user.selectOptions(screen.getByTestId("kanban-status-select"), "in_progress");
+    await chooseSelectOption(user, screen.getByTestId("kanban-status-select"), "В работе");
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/tasks/t1",
@@ -213,7 +214,7 @@ describe("KanbanBoard", () => {
 
     render(<KanbanBoard tasks={[task]} lookupTasks={[task]} now={NOW} canEdit />);
 
-    await user.selectOptions(screen.getByTestId("kanban-status-select"), "done");
+    await chooseSelectOption(user, screen.getByTestId("kanban-status-select"), "Готово");
 
     expect(within(screen.getByTestId("kanban-column-done")).getByText("Moving")).toBeInTheDocument();
     expect(within(screen.getByTestId("kanban-column-new")).queryByText("Moving")).not.toBeInTheDocument();
@@ -228,7 +229,7 @@ describe("KanbanBoard", () => {
 
     render(<KanbanBoard tasks={[task]} lookupTasks={[task]} now={NOW} canEdit />);
 
-    await user.selectOptions(screen.getByTestId("kanban-status-select"), "done");
+    await chooseSelectOption(user, screen.getByTestId("kanban-status-select"), "Готово");
 
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("У вас нет прав на редактирование этой задачи"));
     expect(within(screen.getByTestId("kanban-column-new")).getByText("Stay")).toBeInTheDocument();
@@ -249,9 +250,77 @@ describe("KanbanBoard", () => {
 
     const blockerCard = screen.getByText("Blocker").closest('[data-testid="kanban-card"]');
     expect(blockerCard).toBeInstanceOf(HTMLElement);
-    await user.selectOptions(within(blockerCard as HTMLElement).getByTestId("kanban-status-select"), "done");
+    await chooseSelectOption(user, within(blockerCard as HTMLElement).getByTestId("kanban-status-select"), "Готово");
 
     expect(screen.queryByTestId("kanban-card-blocked")).not.toBeInTheDocument();
+  });
+
+  it("disables the drag handle for a task blocked by an unfinished dependency", () => {
+    const blocker = makeTask({ id: "t1", code: "B-1", status: "new" });
+    const blocked = makeTask({ id: "t2", code: "B-2", title: "Waiting", status: "new", dependsOn: ["t1"] });
+    render(<KanbanBoard tasks={[blocker, blocked]} lookupTasks={[blocker, blocked]} now={NOW} canEdit />);
+
+    const waitingCard = screen.getByText("Waiting").closest('[data-testid="kanban-card"]') as HTMLElement;
+    expect(within(waitingCard).getByTestId("kanban-drag-handle")).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("keeps the drag handle enabled for an unblocked task", () => {
+    const task = makeTask({ id: "t1", title: "Free" });
+    render(<KanbanBoard tasks={[task]} lookupTasks={[task]} now={NOW} canEdit />);
+
+    expect(screen.getByTestId("kanban-drag-handle")).toHaveAttribute("aria-disabled", "false");
+  });
+
+  it("re-enables the drag handle once the blocking dependency is completed", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise<Response>(() => {})));
+    const blocker = makeTask({ id: "t1", code: "B-1", title: "Blocker", status: "new" });
+    const waiting = makeTask({ id: "t2", code: "B-2", title: "Waiting", status: "new", dependsOn: ["t1"] });
+
+    render(<KanbanBoard tasks={[blocker, waiting]} lookupTasks={[blocker, waiting]} now={NOW} canEdit />);
+
+    const waitingCard = screen.getByText("Waiting").closest('[data-testid="kanban-card"]') as HTMLElement;
+    expect(within(waitingCard).getByTestId("kanban-drag-handle")).toHaveAttribute("aria-disabled", "true");
+
+    const blockerCard = screen.getByText("Blocker").closest('[data-testid="kanban-card"]') as HTMLElement;
+    await chooseSelectOption(user, within(blockerCard).getByTestId("kanban-status-select"), "Готово");
+
+    expect(within(waitingCard).getByTestId("kanban-drag-handle")).toHaveAttribute("aria-disabled", "false");
+  });
+
+  it("keeps the drag handle disabled when at least one of several dependencies is unfinished", () => {
+    const doneDep = makeTask({ id: "t1", code: "B-1", status: "done" });
+    const openDep = makeTask({ id: "t2", code: "B-2", status: "in_progress" });
+    const blocked = makeTask({
+      id: "t3",
+      code: "B-3",
+      title: "Waiting on two",
+      status: "new",
+      dependsOn: ["t1", "t2"],
+    });
+    render(
+      <KanbanBoard tasks={[doneDep, openDep, blocked]} lookupTasks={[doneDep, openDep, blocked]} now={NOW} canEdit />,
+    );
+
+    const waitingCard = screen.getByText("Waiting on two").closest('[data-testid="kanban-card"]') as HTMLElement;
+    expect(within(waitingCard).getByTestId("kanban-drag-handle")).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it("does not treat a soft-deleted dependency as blocking", () => {
+    const deletedDep = makeTask({ id: "t1", code: "B-1", status: "new", deletedAt: "2026-08-01T00:00:00.000Z" });
+    const task = makeTask({ id: "t2", code: "B-2", title: "Not blocked", status: "new", dependsOn: ["t1"] });
+    render(<KanbanBoard tasks={[task]} lookupTasks={[deletedDep, task]} now={NOW} canEdit />);
+
+    const card = screen.getByText("Not blocked").closest('[data-testid="kanban-card"]') as HTMLElement;
+    expect(within(card).queryByTestId("kanban-card-blocked")).not.toBeInTheDocument();
+    expect(within(card).getByTestId("kanban-drag-handle")).toHaveAttribute("aria-disabled", "false");
+  });
+
+  it("keeps an unblocked completed task's drag handle enabled as before", () => {
+    const task = makeTask({ id: "t1", title: "Done item", status: "done" });
+    render(<KanbanBoard tasks={[task]} lookupTasks={[task]} now={NOW} canEdit />);
+
+    expect(screen.getByTestId("kanban-drag-handle")).toHaveAttribute("aria-disabled", "false");
   });
 
   it("highlights the applied search term on the card", () => {
@@ -259,5 +328,41 @@ describe("KanbanBoard", () => {
     render(<KanbanBoard tasks={[task]} lookupTasks={[task]} now={NOW} searchQuery="тесты" />);
 
     expect(screen.getByText("тесты", { selector: "mark" })).toBeInTheDocument();
+  });
+
+  it("shows an empty-state placeholder in a column with no tasks", () => {
+    const task = makeTask({ id: "t1", status: "new", title: "Only new" });
+    render(<KanbanBoard tasks={[task]} lookupTasks={[task]} now={NOW} />);
+
+    expect(within(screen.getByTestId("kanban-column-in_progress")).getByTestId("kanban-column-empty")).toBeInTheDocument();
+    expect(within(screen.getByTestId("kanban-column-new")).queryByTestId("kanban-column-empty")).not.toBeInTheDocument();
+  });
+
+  it("shows a loading indicator while a status change is in flight", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockReturnValue(new Promise<Response>(() => {})),
+    );
+    const task = makeTask({ id: "t1", title: "Moving", status: "new" });
+    render(<KanbanBoard tasks={[task]} lookupTasks={[task]} now={NOW} canEdit />);
+
+    expect(screen.queryByTestId("kanban-board-loading")).not.toBeInTheDocument();
+
+    await chooseSelectOption(user, screen.getByTestId("kanban-status-select"), "Готово");
+
+    expect(screen.getByTestId("kanban-board-loading")).toBeInTheDocument();
+  });
+
+  it("shows an aggregate error indicator when a status update fails, without duplicating the card's own alert", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(403, { error: { message: "Forbidden" } })));
+    const task = makeTask({ id: "t1", title: "Stay", status: "new" });
+    render(<KanbanBoard tasks={[task]} lookupTasks={[task]} now={NOW} canEdit />);
+
+    await chooseSelectOption(user, screen.getByTestId("kanban-status-select"), "Готово");
+
+    await waitFor(() => expect(screen.getByTestId("kanban-board-error")).toBeInTheDocument());
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
   });
 });

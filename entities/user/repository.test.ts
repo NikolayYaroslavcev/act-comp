@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { listActivityForUser } from "@/entities/activity/repository";
 import { countUsers, findUserByEmail, findUserById, updateUserSettings } from "@/entities/user/repository";
 import { getDb } from "@/shared/lib/db";
 
@@ -78,5 +79,65 @@ describe("updateUserSettings", () => {
     if (first.status === "ok") {
       expect(first.settings).toBe(after);
     }
+  });
+
+  describe("workDayHours change tracking", () => {
+    const now = new Date("2026-08-31T09:00:00.000Z");
+
+    function countWorkDayHoursEvents(userId: string): number {
+      return listActivityForUser(userId).filter((entry) => entry.action === "work_day_hours_changed").length;
+    }
+
+    it("records a work_day_hours_changed activity entry when the value actually changes", () => {
+      const before = findUserById("u1")!.settings.workDayHours;
+      const next = before === 6 ? 7 : 6;
+      const countBefore = countWorkDayHoursEvents("u1");
+
+      updateUserSettings("u1", { workDayHours: next }, now);
+
+      const entries = listActivityForUser("u1").filter((entry) => entry.action === "work_day_hours_changed");
+      expect(entries).toHaveLength(countBefore + 1);
+      expect(entries.at(-1)).toMatchObject({
+        entityType: "user",
+        entityId: "u1",
+        byUserId: "u1",
+        at: now.toISOString(),
+        metadata: { field: "workDayHours", old: before, new: next },
+      });
+    });
+
+    it("does not record an activity entry when workDayHours is saved with the same value", () => {
+      const current = findUserById("u1")!.settings.workDayHours;
+      const countBefore = countWorkDayHoursEvents("u1");
+
+      updateUserSettings("u1", { workDayHours: current }, now);
+
+      expect(countWorkDayHoursEvents("u1")).toBe(countBefore);
+    });
+
+    it("does not record an activity entry when an unrelated field changes", () => {
+      const countBefore = countWorkDayHoursEvents("u1");
+
+      updateUserSettings("u1", { theme: "dark" }, now);
+
+      expect(countWorkDayHoursEvents("u1")).toBe(countBefore);
+    });
+
+    it("records a new entry for each subsequent real change", () => {
+      const countBefore = countWorkDayHoursEvents("u1");
+
+      updateUserSettings("u1", { workDayHours: 5 }, now);
+      updateUserSettings("u1", { workDayHours: 6 }, now);
+
+      expect(countWorkDayHoursEvents("u1")).toBe(countBefore + 2);
+    });
+
+    it("does not leak an activity entry to another user", () => {
+      const countBeforeU2 = countWorkDayHoursEvents("u2");
+
+      updateUserSettings("u1", { workDayHours: 5 }, now);
+
+      expect(countWorkDayHoursEvents("u2")).toBe(countBeforeU2);
+    });
   });
 });

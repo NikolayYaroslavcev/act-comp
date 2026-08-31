@@ -5,7 +5,7 @@ export const taskStatusSchema = z.enum(["new", "in_progress", "done"]);
 
 export const taskPrioritySchema = z.number().int().min(1).max(5);
 
-export const taskExtensionSchema = z.object({
+const taskExtensionSchema = z.object({
   commentId: idSchema,
   addedMin: z.number().int().positive(),
 });
@@ -35,5 +35,4 @@ export const taskSchema = z.object({
 });
 
 export type TaskStatus = z.infer<typeof taskStatusSchema>;
-export type TaskExtension = z.infer<typeof taskExtensionSchema>;
 export type Task = z.infer<typeof taskSchema>;

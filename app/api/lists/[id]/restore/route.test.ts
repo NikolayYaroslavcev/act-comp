@@ -48,14 +48,14 @@ describe("POST /api/lists/[id]/restore", () => {
     expect(response.status).toBe(404);
   });
 
-  it("returns 403 when the caller does not own the deleted list", async () => {
+  it("returns 404 when the caller does not own the deleted list", async () => {
     const stranger = sessionFor("u2", "72");
     const list = createList("u1", { title: "Owned", template: "work", deadline: null });
     findListById(list.id)!.deletedAt = new Date().toISOString();
 
     const response = await callRestore(list.id, restoreRequest(list.id, stranger.id));
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(404);
   });
 
   it("returns 403 for an edit-access shared user", async () => {

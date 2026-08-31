@@ -1,6 +1,8 @@
 import type { Task, TaskStatus } from "@/entities/task/schema";
 import type { TimerAction, UpdateTaskInput } from "@/entities/task/requests";
 import type { HistoryEntry } from "@/entities/common/schema";
+import { DEFAULT_SETTINGS } from "@/entities/user/schema";
+import { calculateWorkingElapsedMs, calculateWorkingElapsedMinutes } from "@/entities/task/working-elapsed";
 
 export type TaskStatusCounts = Record<TaskStatus, number>;
 
@@ -12,7 +14,7 @@ export type TaskStatusCounts = Record<TaskStatus, number>;
  * (day 16 of the master-plan) can be swapped for a live one without
  * touching the algorithm itself.
  */
-export interface TaskHistorySignal {
+interface TaskHistorySignal {
   averageActualMinutes: number;
 }
 
@@ -23,6 +25,14 @@ const TASK_DUE_WITHIN_24H_BOOST = 5;
 const TASK_DUE_WITHIN_3D_BOOST = 2;
 const TASK_BLOCKING_PRIORITY_BOOST = 5;
 const TASK_HISTORY_OVERRUN_BOOST = 3;
+/**
+ * A task blocked by an unresolved dependency can't actually be started, so
+ * it shouldn't rank as work to pick up next — the score nudges it down
+ * rather than up. Neither the ТЗ nor the master-plan pins an exact number
+ * for this factor, so this reuses the smallest boost already in the
+ * algorithm (TASK_DUE_WITHIN_3D_BOOST) rather than inventing a new scale.
+ */
+const TASK_BLOCKED_BY_DEPENDENCY_PENALTY = TASK_DUE_WITHIN_3D_BOOST;
 
 const MS_PER_HOUR = 60 * 60 * 1000;
 const MS_PER_DAY = 24 * MS_PER_HOUR;
@@ -75,12 +85,29 @@ function calculateHistoryBoost(task: Task, historyProvider: TaskHistoryProvider)
   return signal.averageActualMinutes > task.estimatedMin ? TASK_HISTORY_OVERRUN_BOOST : 0;
 }
 
+function toFiniteNumber(value: number, fallback: number): number {
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function calculateDependencyAdjustment(task: Task, allTasks: Task[]): number {
+  const blockingBoost = isBlockingOpenTasks(task, allTasks) ? TASK_BLOCKING_PRIORITY_BOOST : 0;
+
+  const byId = new Map(allTasks.map((other) => [other.id, other]));
+  const blockedPenalty = isTaskBlocked(task, byId) ? TASK_BLOCKED_BY_DEPENDENCY_PENALTY : 0;
+
+  return blockingBoost - blockedPenalty;
+}
+
 /**
  * Smart Priority Algorithm for a single task (master-plan day 3 domain
- * core). Combines the user-set priority with deadline proximity, whether
- * the task blocks other open work, and a history signal for similar tasks.
- * Done tasks return their own priority unmodified — a finished task carries
- * no urgency and no longer blocks anything.
+ * core, day 16 history wiring). Combines the user-set priority with
+ * deadline proximity, the existing dependsOn graph (a task that blocks
+ * other open work is boosted; a task itself blocked by an unresolved
+ * dependency is nudged down — see TASK_BLOCKED_BY_DEPENDENCY_PENALTY), and
+ * a history signal for similar tasks. Done tasks return their own priority
+ * unmodified — a finished task carries no urgency and no longer blocks or
+ * is blocked by anything. The result is floored at 0 and never NaN/Infinity,
+ * even if a corrupted `task.priority` reaches this function.
  */
 export function calculatePriority(
   task: Task,
@@ -88,15 +115,52 @@ export function calculatePriority(
   historyProvider: TaskHistoryProvider,
   now: Date = new Date(),
 ): number {
+  const basePriority = toFiniteNumber(task.priority, 0);
+
   if (task.status === "done") {
-    return task.priority;
+    return basePriority;
   }
 
   const deadlineBoost = calculateDeadlineBoost(task, now);
-  const dependencyBoost = isBlockingOpenTasks(task, allTasks) ? TASK_BLOCKING_PRIORITY_BOOST : 0;
+  const dependencyAdjustment = calculateDependencyAdjustment(task, allTasks);
   const historyBoost = calculateHistoryBoost(task, historyProvider);
 
-  return task.priority + deadlineBoost + dependencyBoost + historyBoost;
+  const total = basePriority + deadlineBoost + dependencyAdjustment + historyBoost;
+  return Math.max(0, toFiniteNumber(total, 0));
+}
+
+/**
+ * Real history signal for the Smart Priority Algorithm (master-plan day 16):
+ * replaces the day-3 fixture provider with an actual computation over
+ * completed tasks, using only fields the Task model already has —
+ * `category` for similarity (the model has no other categorical grouping;
+ * per-tag matching isn't specified anywhere and would just be a second,
+ * unjustified similarity heuristic) and `timeSpentMin` for "how long it
+ * actually took". Excludes the task being scored, soft-deleted tasks, and
+ * anything not `done`. Returns null (no signal) when the task has no
+ * category or no completed same-category history exists yet.
+ */
+export function createSimilarTaskHistoryProvider(allTasks: Task[]): TaskHistoryProvider {
+  return (task) => {
+    if (task.category === null) {
+      return null;
+    }
+
+    const similar = allTasks.filter(
+      (other) =>
+        other.id !== task.id &&
+        other.deletedAt === null &&
+        other.status === "done" &&
+        other.category === task.category,
+    );
+
+    if (similar.length === 0) {
+      return null;
+    }
+
+    const totalMinutes = similar.reduce((sum, other) => sum + other.timeSpentMin, 0);
+    return { averageActualMinutes: totalMinutes / similar.length };
+  };
 }
 
 export class DependencyCycleError extends Error {
@@ -237,6 +301,7 @@ export function getCascadeUpdates(
 }
 
 export type ParentAssignmentError = "not_found" | "deleted" | "different_list" | "self" | "cycle";
+export type DependsOnAssignmentError = "not_found" | "deleted" | "different_list" | "self";
 
 function isAncestorOf(candidateAncestorId: string, startId: string, tasksById: ReadonlyMap<string, Task>): boolean {
   const seen = new Set<string>();
@@ -282,6 +347,31 @@ export function validateParentAssignment(
   return null;
 }
 
+export function validateDependsOnAssignment(
+  task: Task,
+  dependsOn: readonly string[],
+  tasksById: ReadonlyMap<string, Task>,
+): DependsOnAssignmentError | null {
+  for (const depId of dependsOn) {
+    if (depId === task.id) {
+      return "self";
+    }
+
+    const dependency = tasksById.get(depId);
+    if (!dependency) {
+      return "not_found";
+    }
+    if (dependency.deletedAt !== null) {
+      return "deleted";
+    }
+    if (dependency.listId !== task.listId) {
+      return "different_list";
+    }
+  }
+
+  return null;
+}
+
 export interface ParentSyncUpdate {
   taskId: string;
   subtaskIds: string[];
@@ -303,18 +393,19 @@ export function computeParentSyncUpdates(
     return [];
   }
 
+  const childListId = tasksById.get(childId)?.listId;
   const updates: ParentSyncUpdate[] = [];
 
   if (previousParentId !== null) {
     const oldParent = tasksById.get(previousParentId);
-    if (oldParent) {
+    if (oldParent && oldParent.listId === childListId) {
       updates.push({ taskId: oldParent.id, subtaskIds: oldParent.subtaskIds.filter((id) => id !== childId) });
     }
   }
 
   if (nextParentId !== null) {
     const newParent = tasksById.get(nextParentId);
-    if (newParent && !newParent.subtaskIds.includes(childId)) {
+    if (newParent && newParent.listId === childListId && !newParent.subtaskIds.includes(childId)) {
       updates.push({ taskId: newParent.id, subtaskIds: [...newParent.subtaskIds, childId] });
     }
   }
@@ -370,6 +461,151 @@ const UPDATABLE_TASK_FIELDS = [
   "dependsOn",
   "parentId",
 ] as const;
+
+export type UpdatableTaskField = (typeof UPDATABLE_TASK_FIELDS)[number];
+
+export type UpdatableTaskSnapshot = Pick<Task, UpdatableTaskField>;
+
+const UPDATABLE_TASK_FIELD_SET = new Set<string>(UPDATABLE_TASK_FIELDS);
+
+function isUpdatableTaskField(field: string): field is UpdatableTaskField {
+  return UPDATABLE_TASK_FIELD_SET.has(field);
+}
+
+function cloneHistoryValue<T>(value: T): T {
+  return Array.isArray(value) ? ([...value] as T) : value;
+}
+
+function copyUpdatableSnapshot(task: Task): UpdatableTaskSnapshot {
+  return {
+    title: task.title,
+    description: task.description,
+    status: task.status,
+    priority: task.priority,
+    category: task.category,
+    tags: [...task.tags],
+    deadline: task.deadline,
+    estimatedMin: task.estimatedMin,
+    dependsOn: [...task.dependsOn],
+    parentId: task.parentId,
+  };
+}
+
+function mutationGroupStartIndex(history: readonly HistoryEntry[], historyIndex: number): number {
+  const at = history[historyIndex].at;
+  let start = historyIndex;
+  while (start > 0 && history[start - 1].at === at && isUpdatableTaskField(history[start - 1].field)) {
+    start -= 1;
+  }
+  return start;
+}
+
+export type ReconstructTaskVersionOutcome =
+  | { status: "ok"; snapshot: UpdatableTaskSnapshot }
+  | { status: "unknown_version" };
+
+/**
+ * Restores user-updatable fields to the state immediately before the mutation
+ * that contains `historyIndex`. History entries are field diffs (`old`/`new`);
+ * later diffs are undone by applying `old`. Runtime/server-owned fields are
+ * ignored. The input task is not mutated.
+ */
+export function reconstructUpdatableStateBeforeHistoryIndex(
+  task: Task,
+  historyIndex: number,
+): ReconstructTaskVersionOutcome {
+  const { history } = task;
+  if (!Number.isInteger(historyIndex) || historyIndex < 0 || historyIndex >= history.length) {
+    return { status: "unknown_version" };
+  }
+  if (!isUpdatableTaskField(history[historyIndex].field)) {
+    return { status: "unknown_version" };
+  }
+
+  const start = mutationGroupStartIndex(history, historyIndex);
+  const snapshot = copyUpdatableSnapshot(task);
+
+  for (let index = history.length - 1; index >= start; index -= 1) {
+    const entry = history[index];
+    if (!isUpdatableTaskField(entry.field)) {
+      continue;
+    }
+    (snapshot as Record<UpdatableTaskField, unknown>)[entry.field] = cloneHistoryValue(entry.old);
+  }
+
+  return { status: "ok", snapshot };
+}
+
+export interface RestorableTaskVersion {
+  historyIndex: number;
+  at: string;
+  byUserId: string;
+  fields: UpdatableTaskField[];
+}
+
+export function listRestorableTaskVersions(task: Task): RestorableTaskVersion[] {
+  const versions: RestorableTaskVersion[] = [];
+
+  for (let index = 0; index < task.history.length; index += 1) {
+    const entry = task.history[index];
+    if (!isUpdatableTaskField(entry.field)) {
+      continue;
+    }
+
+    const previous = versions[versions.length - 1];
+    if (previous && previous.at === entry.at) {
+      previous.fields.push(entry.field);
+      continue;
+    }
+
+    versions.push({
+      historyIndex: index,
+      at: entry.at,
+      byUserId: entry.byUserId,
+      fields: [entry.field],
+    });
+  }
+
+  return versions;
+}
+
+export type TaskRollbackPreviewOutcome =
+  | {
+      status: "ok";
+      at: string;
+      byUserId: string;
+      changes: Array<{ field: UpdatableTaskField; current: unknown; restored: unknown }>;
+    }
+  | { status: "unknown_version" };
+
+export function previewTaskRollback(task: Task, historyIndex: number): TaskRollbackPreviewOutcome {
+  const reconstructed = reconstructUpdatableStateBeforeHistoryIndex(task, historyIndex);
+  if (reconstructed.status !== "ok") {
+    return reconstructed;
+  }
+
+  const entry = task.history[historyIndex];
+  const changes: Array<{ field: UpdatableTaskField; current: unknown; restored: unknown }> = [];
+  for (const field of UPDATABLE_TASK_FIELDS) {
+    const current = task[field];
+    const restored = reconstructed.snapshot[field];
+    if (!valuesEqual(current, restored)) {
+      changes.push({ field, current: cloneHistoryValue(current), restored: cloneHistoryValue(restored) });
+    }
+  }
+
+  return { status: "ok", at: entry.at, byUserId: entry.byUserId, changes };
+}
+
+export function buildRollbackPatch(task: Task, snapshot: UpdatableTaskSnapshot): UpdateTaskInput {
+  const patch: UpdateTaskInput = {};
+  for (const field of UPDATABLE_TASK_FIELDS) {
+    if (!valuesEqual(task[field], snapshot[field])) {
+      (patch as Record<string, unknown>)[field] = cloneHistoryValue(snapshot[field]);
+    }
+  }
+  return patch;
+}
 
 function valuesEqual(a: unknown, b: unknown): boolean {
   if (Array.isArray(a) && Array.isArray(b)) {
@@ -628,21 +864,89 @@ export function getTimerState(task: Pick<Task, "timerStartedAt" | "timerPausedAt
   return "stopped";
 }
 
-export function elapsedMs(task: Pick<Task, "timeSpentMin" | "timerStartedAt" | "timerPausedAt">, now: Date): number {
+export function elapsedMs(
+  task: Pick<Task, "timeSpentMin" | "timerStartedAt" | "timerPausedAt">,
+  now: Date,
+  workDayHours: number = DEFAULT_SETTINGS.workDayHours,
+): number {
   const committedMs = task.timeSpentMin * MS_PER_MINUTE;
   if (getTimerState(task) !== "running" || task.timerStartedAt === null) {
     return committedMs;
   }
 
-  const runningMs = now.getTime() - Date.parse(task.timerStartedAt);
-  return committedMs + Math.max(0, runningMs);
+  return committedMs + calculateWorkingElapsedMs(task.timerStartedAt, now, workDayHours);
 }
 
 export function elapsedMinutes(
   task: Pick<Task, "timeSpentMin" | "timerStartedAt" | "timerPausedAt">,
   now: Date,
+  workDayHours: number = DEFAULT_SETTINGS.workDayHours,
 ): number {
-  return Math.floor(elapsedMs(task, now) / MS_PER_MINUTE);
+  return Math.floor(elapsedMs(task, now, workDayHours) / MS_PER_MINUTE);
+}
+
+// Shared with entities/notification/model.ts (time-threshold notifications)
+// and the Timer countdown's colour tiers below — one scale for "time spent
+// vs. estimate", not a second one invented per feature.
+export const TIME_THRESHOLDS = [75, 90, 100] as const;
+export type TimeThreshold = (typeof TIME_THRESHOLDS)[number];
+
+/**
+ * Wall-clock time since the task was created — a separate concept from the
+ * Timer's elapsedMs/elapsedMinutes above, which track worked time and stop
+ * counting while paused. This one only ever reads createdAt, so it keeps
+ * ticking regardless of the timer's state and survives reload with no
+ * stored "start" of its own to go stale.
+ */
+export function elapsedSinceCreatedMs(task: Pick<Task, "createdAt">, now: Date): number {
+  return Math.max(0, now.getTime() - new Date(task.createdAt).getTime());
+}
+
+/**
+ * Countdown = estimated duration - elapsed timer duration (ТЗ: "визуальный
+ * countdown"). Reuses elapsedMs as-is, so committed timeSpentMin/the
+ * calendar-aware running session are the only sources of "spent" — nothing
+ * new is persisted. Null when there is no estimate to count down from. Can
+ * go negative once the estimate is exceeded; callers are responsible for
+ * clamping/relabelling for display (see TaskTimer), since "negative" is a
+ * meaningful signal (overrun) at the domain level.
+ */
+export function remainingMs(
+  task: Pick<Task, "estimatedMin" | "timeSpentMin" | "timerStartedAt" | "timerPausedAt">,
+  now: Date,
+  workDayHours: number = DEFAULT_SETTINGS.workDayHours,
+): number | null {
+  if (task.estimatedMin <= 0) {
+    return null;
+  }
+  return task.estimatedMin * MS_PER_MINUTE - elapsedMs(task, now, workDayHours);
+}
+
+export type TimerCountdownTier = "normal" | "warning" | "urgent";
+
+/**
+ * Colour tier for the countdown, reusing the same elapsed/estimated
+ * percentage scale as the time-threshold notifications (TIME_THRESHOLDS
+ * above) rather than a second, timer-specific scale: under 75% is normal,
+ * 75-99% is warning, 100%+ (estimate exceeded) is urgent.
+ */
+export function getTimerCountdownTier(
+  task: Pick<Task, "estimatedMin" | "timeSpentMin" | "timerStartedAt" | "timerPausedAt">,
+  now: Date,
+  workDayHours: number = DEFAULT_SETTINGS.workDayHours,
+): TimerCountdownTier | null {
+  if (task.estimatedMin <= 0) {
+    return null;
+  }
+
+  const percentElapsed = (elapsedMinutes(task, now, workDayHours) * 100) / task.estimatedMin;
+  if (percentElapsed >= TIME_THRESHOLDS[2]) {
+    return "urgent";
+  }
+  if (percentElapsed >= TIME_THRESHOLDS[0]) {
+    return "warning";
+  }
+  return "normal";
 }
 
 export function estimateProgressPercent(elapsedMin: number, estimatedMin: number): number | null {
@@ -650,6 +954,61 @@ export function estimateProgressPercent(elapsedMin: number, estimatedMin: number
     return null;
   }
   return Math.min(100, Math.floor((elapsedMin * 100) / estimatedMin));
+}
+
+export interface ParsedTimeExtension {
+  addedMin: number;
+}
+
+const MINUTES_PER_UNIT: Record<string, number> = { h: 60, m: 1 };
+
+const COMBINED_EXTENSION = /%(\d+)h\s+(\d+)m%/i;
+const SINGLE_EXTENSION = /%(\d+)([hm])%/i;
+
+function minutesFromCombinedMatch(match: RegExpExecArray): number | null {
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours <= 0 || minutes <= 0) {
+    return null;
+  }
+  return hours * 60 + minutes;
+}
+
+function minutesFromSingleMatch(match: RegExpExecArray): number | null {
+  const amount = Number(match[1]);
+  if (amount <= 0) {
+    return null;
+  }
+  return amount * MINUTES_PER_UNIT[match[2].toLowerCase()];
+}
+
+/**
+ * Recognizes %Nh%, %Nm%, and the combined %5h 10m% form anywhere in comment
+ * text. Only the earliest marker is applied, so one comment yields one extension.
+ */
+export function parseTimeExtension(text: string): ParsedTimeExtension | null {
+  const combined = COMBINED_EXTENSION.exec(text);
+  const single = SINGLE_EXTENSION.exec(text);
+  const combinedIndex = combined?.index ?? Number.POSITIVE_INFINITY;
+  const singleIndex = single?.index ?? Number.POSITIVE_INFINITY;
+
+  if (combined && combinedIndex <= singleIndex) {
+    const addedMin = minutesFromCombinedMatch(combined);
+    if (addedMin !== null) {
+      return { addedMin };
+    }
+  }
+
+  if (!single) {
+    return null;
+  }
+
+  const addedMin = minutesFromSingleMatch(single);
+  if (addedMin === null) {
+    return null;
+  }
+
+  return { addedMin };
 }
 
 function pad2(value: number): string {
@@ -664,12 +1023,11 @@ export function formatElapsedClock(ms: number): string {
   return `${hours}:${pad2(minutes)}:${pad2(seconds)}`;
 }
 
-function commitRunningMinutes(task: Task, now: Date): number {
+function commitRunningMinutes(task: Task, now: Date, workDayHours: number): number {
   if (getTimerState(task) !== "running" || task.timerStartedAt === null) {
     return task.timeSpentMin;
   }
-  const extra = Math.floor(Math.max(0, now.getTime() - Date.parse(task.timerStartedAt)) / MS_PER_MINUTE);
-  return task.timeSpentMin + extra;
+  return task.timeSpentMin + calculateWorkingElapsedMinutes(task.timerStartedAt, now, workDayHours);
 }
 
 function appendTimerHistory(previous: Task, next: Task, byUserId: string, at: string): Task {
@@ -689,11 +1047,17 @@ function appendTimerHistory(previous: Task, next: Task, byUserId: string, at: st
 
 /**
  * Pure timer transition. `timeSpentMin` is committed minutes from completed
- * (paused/stopped) sessions only; a running session is added with floor()
- * on pause/stop so ticks never persist. Timestamps are always taken from
- * `now`, never from the caller.
+ * (paused/stopped) sessions only; a running session is added with floor() of
+ * calendar-aware working elapsed on pause/stop so ticks never persist.
+ * Timestamps are always taken from `now`, never from the caller.
  */
-export function applyTimerAction(task: Task, action: TimerAction, now: Date, byUserId: string): ApplyTimerActionOutcome {
+export function applyTimerAction(
+  task: Task,
+  action: TimerAction,
+  now: Date,
+  byUserId: string,
+  workDayHours: number = DEFAULT_SETTINGS.workDayHours,
+): ApplyTimerActionOutcome {
   if (task.deletedAt !== null) {
     return { status: "deleted" };
   }
@@ -722,7 +1086,7 @@ export function applyTimerAction(task: Task, action: TimerAction, now: Date, byU
       status: "ok",
       task: appendTimerHistory(
         task,
-        { ...task, timeSpentMin: commitRunningMinutes(task, now), timerStartedAt: null, timerPausedAt: at },
+        { ...task, timeSpentMin: commitRunningMinutes(task, now, workDayHours), timerStartedAt: null, timerPausedAt: at },
         byUserId,
         at,
       ),
@@ -746,7 +1110,7 @@ export function applyTimerAction(task: Task, action: TimerAction, now: Date, byU
     status: "ok",
     task: appendTimerHistory(
       task,
-      { ...task, timeSpentMin: commitRunningMinutes(task, now), timerStartedAt: null, timerPausedAt: null },
+      { ...task, timeSpentMin: commitRunningMinutes(task, now, workDayHours), timerStartedAt: null, timerPausedAt: null },
       byUserId,
       at,
     ),

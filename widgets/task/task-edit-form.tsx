@@ -9,9 +9,10 @@ import { taskPrioritySchema, taskSchema, taskStatusSchema } from "@/entities/tas
 import type { UpdateTaskInput } from "@/entities/task/requests";
 import { Button } from "@/shared/ui/button";
 import { Checkbox } from "@/shared/ui/checkbox";
+import { DatePicker } from "@/shared/ui/date-picker";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
-import { Select } from "@/shared/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { Textarea } from "@/shared/ui/textarea";
 
 interface TaskEditFormProps {
@@ -155,13 +156,29 @@ export function TaskEditForm({ task, listTasks, isPending, onSubmit, onCancel }:
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="task-edit-status">Статус</Label>
-          <Select id="task-edit-status" disabled={isPending} {...register("status")}>
-            {(Object.keys(STATUS_LABELS) as Array<keyof typeof STATUS_LABELS>).map((status) => (
-              <option key={status} value={status}>
-                {STATUS_LABELS[status]}
-              </option>
-            ))}
-          </Select>
+          <Controller
+            control={control}
+            name="status"
+            render={({ field }) => (
+              <Select
+                items={STATUS_LABELS}
+                value={field.value}
+                onValueChange={(value) => value && field.onChange(value)}
+                disabled={isPending}
+              >
+                <SelectTrigger id="task-edit-status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(STATUS_LABELS) as Array<keyof typeof STATUS_LABELS>).map((status) => (
+                    <SelectItem key={status} value={status} label={STATUS_LABELS[status]}>
+                      {STATUS_LABELS[status]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          />
         </div>
 
         <div className="space-y-1.5">
@@ -191,13 +208,28 @@ export function TaskEditForm({ task, listTasks, isPending, onSubmit, onCancel }:
 
         <div className="space-y-1.5">
           <Label htmlFor="task-edit-deadline">Дедлайн</Label>
-          <Input
-            id="task-edit-deadline"
-            type="date"
-            disabled={isPending}
-            aria-invalid={errors.deadline ? true : undefined}
-            aria-describedby={errors.deadline ? "task-edit-deadline-error" : undefined}
-            {...register("deadline")}
+          <Controller
+            control={control}
+            name="deadline"
+            render={({ field }) => (
+              <DatePicker
+                id="task-edit-deadline"
+                disabled={isPending}
+                aria-invalid={errors.deadline ? true : undefined}
+                aria-describedby={errors.deadline ? "task-edit-deadline-error" : undefined}
+                value={field.value ? new Date(`${field.value}T00:00:00`) : null}
+                onChange={(date) => {
+                  if (!date) {
+                    field.onChange("");
+                    return;
+                  }
+                  const pad = (n: number) => String(n).padStart(2, "0");
+                  field.onChange(
+                    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
+                  );
+                }}
+              />
+            )}
           />
           {errors.deadline && (
             <p id="task-edit-deadline-error" role="alert" className="text-sm text-destructive">
@@ -227,14 +259,40 @@ export function TaskEditForm({ task, listTasks, isPending, onSubmit, onCancel }:
 
         <div className="space-y-1.5">
           <Label htmlFor="task-edit-parent">Родительская задача</Label>
-          <Select id="task-edit-parent" disabled={isPending} {...register("parentId")}>
-            <option value="">Без родителя</option>
-            {candidateTasks.map((candidate) => (
-              <option key={candidate.id} value={candidate.id}>
-                {candidate.code} — {candidate.title}
-              </option>
-            ))}
-          </Select>
+          <Controller
+            control={control}
+            name="parentId"
+            render={({ field }) => (
+              <Select
+                items={[
+                  { value: "__none__", label: "Без родителя" },
+                  ...candidateTasks.map((candidate) => ({
+                    value: candidate.id,
+                    label: `${candidate.code} — ${candidate.title}`,
+                  })),
+                ]}
+                value={field.value === "" ? "__none__" : field.value}
+                onValueChange={(value) => field.onChange(value === "__none__" || !value ? "" : value)}
+                disabled={isPending}
+              >
+                <SelectTrigger id="task-edit-parent">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__" label="Без родителя">Без родителя</SelectItem>
+                  {candidateTasks.map((candidate) => (
+                    <SelectItem
+                      key={candidate.id}
+                      value={candidate.id}
+                      label={`${candidate.code} — ${candidate.title}`}
+                    >
+                      {candidate.code} — {candidate.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          />
         </div>
       </div>
 

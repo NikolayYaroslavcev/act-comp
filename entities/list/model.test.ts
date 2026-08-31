@@ -1,20 +1,24 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyListQuery,
   applyListShare,
   buildDuplicatedList,
   buildListDeletionHistoryEntry,
   buildListRestorationHistoryEntry,
   calculateListPriority,
   calculateListProgress,
+  calculateListUrgency,
   canDeleteList,
   canEditList,
   canManageListSharing,
   canRestoreList,
   canViewList,
   diffListChanges,
+  filterLists,
   findLatestListActivity,
   isListArchiveCandidate,
   isListDeadlineOverdue,
+  searchLists,
   selectVisibleLists,
   sortListsByPriority,
 } from "@/entities/list/model";
@@ -123,6 +127,73 @@ describe("isListDeadlineOverdue", () => {
 
   it("returns true when the deadline has passed", () => {
     expect(isListDeadlineOverdue(makeList({ deadline: "2026-08-26T00:00:00.000Z" }), NOW)).toBe(true);
+  });
+});
+
+describe("calculateListUrgency", () => {
+  const NOW = new Date("2026-08-27T12:00:00.000Z");
+
+  it("is normal for a list with no deadline and no overdue/due-soon tasks", () => {
+    const list = makeList({ deadline: null });
+    const tasks = [makeTask({ status: "new", deadline: null })];
+    expect(calculateListUrgency(list, tasks, NOW)).toBe("normal");
+  });
+
+  it("is normal for an empty list", () => {
+    expect(calculateListUrgency(makeList({ deadline: null }), [], NOW)).toBe("normal");
+  });
+
+  it("is urgent when an open task is overdue", () => {
+    const list = makeList({ deadline: null });
+    const tasks = [makeTask({ status: "in_progress", deadline: "2026-08-20T00:00:00.000Z" })];
+    expect(calculateListUrgency(list, tasks, NOW)).toBe("urgent");
+  });
+
+  it("is urgent when the list's own deadline has passed", () => {
+    const list = makeList({ deadline: "2026-08-26T00:00:00.000Z" });
+    const tasks = [makeTask({ status: "new", deadline: null })];
+    expect(calculateListUrgency(list, tasks, NOW)).toBe("urgent");
+  });
+
+  it("does not treat a done task's past deadline as overdue", () => {
+    const list = makeList({ deadline: null });
+    const tasks = [makeTask({ status: "done", deadline: "2026-08-01T00:00:00.000Z" })];
+    expect(calculateListUrgency(list, tasks, NOW)).toBe("normal");
+  });
+
+  it("is warning when a task deadline is within 24h but not yet overdue", () => {
+    const list = makeList({ deadline: null });
+    const tasks = [makeTask({ status: "new", deadline: "2026-08-28T00:00:00.000Z" })];
+    expect(calculateListUrgency(list, tasks, NOW)).toBe("warning");
+  });
+
+  it("is warning when the list's own deadline is within 24h but not yet overdue", () => {
+    const list = makeList({ deadline: "2026-08-28T00:00:00.000Z" });
+    const tasks = [makeTask({ status: "new", deadline: null })];
+    expect(calculateListUrgency(list, tasks, NOW)).toBe("warning");
+  });
+
+  it("is normal when the deadline is further away than the warning window", () => {
+    const list = makeList({ deadline: "2026-09-01T00:00:00.000Z" });
+    const tasks = [makeTask({ status: "new", deadline: "2026-09-01T00:00:00.000Z" })];
+    expect(calculateListUrgency(list, tasks, NOW)).toBe("normal");
+  });
+
+  it("prefers urgent over warning when both an overdue and a due-soon task exist", () => {
+    const list = makeList({ deadline: null });
+    const tasks = [
+      makeTask({ id: "t1", status: "in_progress", deadline: "2026-08-20T00:00:00.000Z" }),
+      makeTask({ id: "t2", status: "new", deadline: "2026-08-28T00:00:00.000Z" }),
+    ];
+    expect(calculateListUrgency(list, tasks, NOW)).toBe("urgent");
+  });
+
+  it("ignores soft-deleted tasks", () => {
+    const list = makeList({ deadline: null });
+    const tasks = [
+      makeTask({ status: "in_progress", deadline: "2026-08-20T00:00:00.000Z", deletedAt: "2026-08-21T00:00:00.000Z" }),
+    ];
+    expect(calculateListUrgency(list, tasks, NOW)).toBe("normal");
   });
 });
 
@@ -645,5 +716,68 @@ describe("isListArchiveCandidate", () => {
     expect(isListArchiveCandidate(latestActivityAt, NOW)).toBe(
       isListArchiveCandidate(latestActivityAt, NOW)
     );
+  });
+});
+
+describe("searchLists", () => {
+  it("returns every list unchanged for an empty/whitespace query", () => {
+    const lists = [makeList({ id: "l1", title: "Спринт 34" }), makeList({ id: "l2", title: "Личное" })];
+    expect(searchLists(lists, "   ")).toEqual(lists);
+  });
+
+  it("matches the title case-insensitively", () => {
+    const lists = [makeList({ id: "l1", title: "Спринт 34" }), makeList({ id: "l2", title: "Личное" })];
+    expect(searchLists(lists, "спринт").map((l) => l.id)).toEqual(["l1"]);
+  });
+
+  it("matches a partial substring anywhere in the title", () => {
+    const lists = [makeList({ id: "l1", title: "Backend roadmap" })];
+    expect(searchLists(lists, "road").map((l) => l.id)).toEqual(["l1"]);
+  });
+
+  it("returns an empty array when nothing matches", () => {
+    const lists = [makeList({ id: "l1", title: "Спринт 34" })];
+    expect(searchLists(lists, "no-such-list")).toEqual([]);
+  });
+});
+
+describe("filterLists", () => {
+  it("returns every list when no filters are set", () => {
+    const lists = [makeList({ id: "l1", template: "work" }), makeList({ id: "l2", template: "personal" })];
+    expect(filterLists(lists, {})).toEqual(lists);
+  });
+
+  it("filters by template", () => {
+    const lists = [
+      makeList({ id: "l1", template: "work" }),
+      makeList({ id: "l2", template: "personal" }),
+      makeList({ id: "l3", template: "project" }),
+    ];
+    expect(filterLists(lists, { template: ["work", "project"] }).map((l) => l.id)).toEqual(["l1", "l3"]);
+  });
+
+  it("filters by deadline range, excluding lists with no deadline", () => {
+    const lists = [
+      makeList({ id: "l1", deadline: "2026-09-05T00:00:00.000Z" }),
+      makeList({ id: "l2", deadline: "2026-09-20T00:00:00.000Z" }),
+      makeList({ id: "l3", deadline: null }),
+    ];
+    expect(
+      filterLists(lists, { deadlineFrom: "2026-09-01T00:00:00.000Z", deadlineTo: "2026-09-10T00:00:00.000Z" }).map(
+        (l) => l.id,
+      ),
+    ).toEqual(["l1"]);
+  });
+});
+
+describe("applyListQuery", () => {
+  it("combines search and structured filters", () => {
+    const lists = [
+      makeList({ id: "l1", title: "Backend sprint", template: "work" }),
+      makeList({ id: "l2", title: "Backend chores", template: "personal" }),
+      makeList({ id: "l3", title: "Frontend sprint", template: "work" }),
+    ];
+    const result = applyListQuery(lists, { search: "backend", filters: { template: ["work"] } });
+    expect(result.map((l) => l.id)).toEqual(["l1"]);
   });
 });

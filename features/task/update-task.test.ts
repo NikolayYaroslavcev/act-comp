@@ -88,9 +88,11 @@ describe("updateTaskForUser", () => {
 
   it("delegates domain-validation outcomes (e.g. a dependency cycle) to the repository", () => {
     const list = createList("u-owner-8", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const a = makeTaskIn(list.id);
+    const b = makeTaskIn(list.id);
+    updateTaskForUser("u-owner-8", a.id, { dependsOn: [b.id] });
 
-    const result = updateTaskForUser("u-owner-8", task.id, { dependsOn: [task.id] });
+    const result = updateTaskForUser("u-owner-8", b.id, { dependsOn: [a.id] });
 
     expect(result.status).toBe("cycle");
   });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getDb, saveDb } from "@/shared/lib/db";
 import { notificationKey } from "@/entities/notification/model";
+import { updateUserSettings } from "@/entities/user/repository";
 import { ackNotificationsForUser } from "./ack-notifications";
 import { listDueNotificationsForUser } from "./list-due-notifications";
 
@@ -32,13 +33,36 @@ describe("listDueNotificationsForUser", () => {
     }
     expect(asOwner.notifications.some((item) => item.key === key)).toBe(true);
 
-    ackNotificationsForUser("u1", [key]);
+    ackNotificationsForUser("u1", [key], NOW);
     const afterAck = listDueNotificationsForUser("u1", NOW);
     expect(afterAck.status).toBe("ok");
     if (afterAck.status !== "ok") {
       return;
     }
     expect(afterAck.notifications.some((item) => item.key === key)).toBe(false);
+  });
+
+  it("emits 90% from a running timer using the same elapsed as the timer", () => {
+    const db = getDb();
+    db.tasks.t11 = {
+      ...db.tasks.t11,
+      estimatedMin: 180,
+      timeSpentMin: 157,
+      timerStartedAt: "2026-08-29T11:40:00.000Z",
+      timerPausedAt: null,
+      status: "in_progress",
+      deletedAt: null,
+    };
+    saveDb(db);
+
+    const result = listDueNotificationsForUser("u1", NOW);
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") {
+      return;
+    }
+    expect(result.notifications.some((item) => item.key === notificationKey("time_threshold", "t11", 90))).toBe(
+      true,
+    );
   });
 
   it("respects u2 timeThresholdAlerts=false even when a shared task crosses 75%", () => {
@@ -84,7 +108,7 @@ describe("listDueNotificationsForUser", () => {
     expect(at15.notifications.map((item) => item.key)).toContain(key15);
     expect(at15.notifications.map((item) => item.key)).not.toContain(key10);
 
-    ackNotificationsForUser("u1", [key15]);
+    ackNotificationsForUser("u1", [key15], new Date(deadline.getTime() - 15 * 60_000));
     const at10 = listDueNotificationsForUser("u1", new Date(deadline.getTime() - 10 * 60_000));
     expect(at10.status).toBe("ok");
     if (at10.status !== "ok") {
@@ -93,7 +117,7 @@ describe("listDueNotificationsForUser", () => {
     expect(at10.notifications.map((item) => item.key)).toContain(key10);
     expect(at10.notifications.map((item) => item.key)).not.toContain(key15);
 
-    ackNotificationsForUser("u1", [key10]);
+    ackNotificationsForUser("u1", [key10], new Date(deadline.getTime() - 10 * 60_000));
     const at5 = listDueNotificationsForUser("u1", new Date(deadline.getTime() - 5 * 60_000));
     expect(at5.status).toBe("ok");
     if (at5.status !== "ok") {
@@ -101,7 +125,7 @@ describe("listDueNotificationsForUser", () => {
     }
     expect(at5.notifications.map((item) => item.key)).toContain(key5);
 
-    ackNotificationsForUser("u1", [key5]);
+    ackNotificationsForUser("u1", [key5], new Date(deadline.getTime() - 5 * 60_000));
     const overdue = listDueNotificationsForUser("u1", new Date(deadline.getTime() + 1));
     expect(overdue.status).toBe("ok");
     if (overdue.status !== "ok") {
@@ -110,6 +134,63 @@ describe("listDueNotificationsForUser", () => {
     expect(overdue.notifications.some((item) => item.entityId === "l2" && item.kind === "deadline_reminder")).toBe(
       false,
     );
+  });
+
+  it("does not emit a workDayHours notification just from loading with the currently saved value", () => {
+    const before = listDueNotificationsForUser("u1", NOW);
+    expect(before.status).toBe("ok");
+    if (before.status !== "ok") {
+      return;
+    }
+    expect(before.notifications.some((item) => item.kind === "work_day_hours_changed")).toBe(false);
+  });
+
+  it("emits a workDayHours notification after a real settings change and not again after ack", () => {
+    const result = updateUserSettings("u1", { workDayHours: 5 }, NOW);
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") {
+      return;
+    }
+
+    const first = listDueNotificationsForUser("u1", NOW);
+    expect(first.status).toBe("ok");
+    if (first.status !== "ok") {
+      return;
+    }
+    const notification = first.notifications.find((item) => item.kind === "work_day_hours_changed");
+    expect(notification).toBeDefined();
+    expect(notification?.body).toContain("5");
+
+    ackNotificationsForUser("u1", [notification!.key], NOW);
+    const afterAck = listDueNotificationsForUser("u1", NOW);
+    expect(afterAck.status).toBe("ok");
+    if (afterAck.status !== "ok") {
+      return;
+    }
+    expect(afterAck.notifications.some((item) => item.kind === "work_day_hours_changed")).toBe(false);
+  });
+
+  it("does not emit a workDayHours notification for another user's change", () => {
+    updateUserSettings("u1", { workDayHours: 5 }, NOW);
+
+    const result = listDueNotificationsForUser("u2", NOW);
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") {
+      return;
+    }
+    expect(result.notifications.some((item) => item.kind === "work_day_hours_changed")).toBe(false);
+  });
+
+  it("does not emit a workDayHours notification when workHoursRecalculation is disabled", () => {
+    updateUserSettings("u1", { notifications: { workHoursRecalculation: false } }, NOW);
+    updateUserSettings("u1", { workDayHours: 5 }, NOW);
+
+    const result = listDueNotificationsForUser("u1", NOW);
+    expect(result.status).toBe("ok");
+    if (result.status !== "ok") {
+      return;
+    }
+    expect(result.notifications.some((item) => item.kind === "work_day_hours_changed")).toBe(false);
   });
 });
 

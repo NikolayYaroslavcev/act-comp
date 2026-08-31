@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import type { LoginInput } from "@/entities/auth/requests";
-import type { LoginResult } from "@/features/auth/login";
+import type { PublicUser } from "@/entities/user/dto";
 
 const INVALID_CREDENTIALS_MESSAGE = "Неверный email или пароль";
 const VALIDATION_ERROR_MESSAGE = "Проверьте правильность заполнения формы";
@@ -11,7 +11,7 @@ const NETWORK_ERROR_MESSAGE =
 const UNEXPECTED_ERROR_MESSAGE = "Что-то пошло не так. Попробуйте ещё раз";
 
 export interface UseLoginResult {
-  login: (input: LoginInput) => Promise<LoginResult | null>;
+  login: (input: LoginInput) => Promise<{ user: PublicUser } | null>;
   isPending: boolean;
   error: string | null;
 }
@@ -25,7 +25,7 @@ export function useLogin(): UseLoginResult {
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const login = useCallback(async (input: LoginInput): Promise<LoginResult | null> => {
+  const login = useCallback(async (input: LoginInput): Promise<{ user: PublicUser } | null> => {
     setIsPending(true);
     setError(null);
 
@@ -51,13 +51,13 @@ export function useLogin(): UseLoginResult {
         return null;
       }
 
-      const json = (await response.json().catch(() => null)) as { data?: LoginResult } | null;
-      if (!json?.data) {
+      const json = (await response.json().catch(() => null)) as { data?: { user: PublicUser } } | null;
+      if (!json?.data?.user) {
         setError(UNEXPECTED_ERROR_MESSAGE);
         return null;
       }
 
-      return json.data;
+      return { user: json.data.user };
     } catch {
       setError(NETWORK_ERROR_MESSAGE);
       return null;

@@ -39,6 +39,9 @@ export async function PATCH(request: NextRequest) {
   if (result.status === "not_found") {
     return jsonError(401, "Unauthorized");
   }
+  if (result.status === "invalid_keys") {
+    return jsonError(400, "Invalid notification keys");
+  }
 
   return jsonOk(result.keys);
 }

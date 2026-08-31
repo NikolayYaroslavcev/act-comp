@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import type { CommentWithAuthor } from "@/entities/comment/dto";
+import { useCreateTaskCommentMutation, useGetTaskCommentsQuery } from "@/features/comment/comments-api";
 
 // Every message here is worded to never exactly match the generic
 // task-level hook messages (useUpdateTask/useCloneTask) — the comments
@@ -29,70 +30,47 @@ export interface UseTaskCommentsResult {
   submitError: string | null;
 }
 
+function statusOf(error: unknown): number | "FETCH_ERROR" | undefined {
+  if (error && typeof error === "object" && "status" in error) {
+    return (error as { status: number | "FETCH_ERROR" }).status;
+  }
+  return undefined;
+}
+
+function loadErrorMessage(error: unknown): string {
+  const status = statusOf(error);
+  if (status === 401) return LOAD_SESSION_EXPIRED_MESSAGE;
+  if (status === 404) return LOAD_NOT_FOUND_MESSAGE;
+  if (status === "FETCH_ERROR") return LOAD_NETWORK_ERROR_MESSAGE;
+  return LOAD_UNEXPECTED_ERROR_MESSAGE;
+}
+
+function submitErrorMessage(error: unknown): string {
+  const status = statusOf(error);
+  if (status === 401) return SUBMIT_SESSION_EXPIRED_MESSAGE;
+  if (status === 403) return SUBMIT_FORBIDDEN_MESSAGE;
+  if (status === 404) return SUBMIT_NOT_FOUND_MESSAGE;
+  if (status === 400) return SUBMIT_VALIDATION_ERROR_MESSAGE;
+  if (status === "FETCH_ERROR") return SUBMIT_NETWORK_ERROR_MESSAGE;
+  return SUBMIT_UNEXPECTED_ERROR_MESSAGE;
+}
+
 /**
- * Client-side wrapper around GET/POST `/api/tasks/:id/comments`. Owns
- * request state (loading/pending/error) and the loaded list only —
- * permissions and validation stay on the server, this just relays the
- * outcome and appends what the server returns.
+ * Permissions and validation stay server-side; this only relays the
+ * query/mutation outcome. The double-submit guard stays explicit (a ref,
+ * not RTK Query dedup) because
+ * RTK Query dedupes identical in-flight *queries*, not mutations — two
+ * addComment calls in flight are two distinct POSTs unless guarded here.
  */
 export function useTaskComments(taskId: string): UseTaskCommentsResult {
-  const [comments, setComments] = useState<CommentWithAuthor[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { data, isLoading, error: queryError } = useGetTaskCommentsQuery(taskId);
+  const [createComment] = useCreateTaskCommentMutation();
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      setIsLoading(true);
-      setLoadError(null);
-
-      try {
-        const response = await fetch(`/api/tasks/${taskId}/comments`);
-        if (cancelled) {
-          return;
-        }
-
-        if (response.status === 401) {
-          setLoadError(LOAD_SESSION_EXPIRED_MESSAGE);
-          return;
-        }
-        if (response.status === 404) {
-          setLoadError(LOAD_NOT_FOUND_MESSAGE);
-          return;
-        }
-        if (!response.ok) {
-          setLoadError(LOAD_UNEXPECTED_ERROR_MESSAGE);
-          return;
-        }
-
-        const json = (await response.json().catch(() => null)) as { data?: unknown } | null;
-        if (!json || !Array.isArray(json.data)) {
-          setLoadError(LOAD_UNEXPECTED_ERROR_MESSAGE);
-          return;
-        }
-
-        setComments(json.data as CommentWithAuthor[]);
-      } catch {
-        if (!cancelled) {
-          setLoadError(LOAD_NETWORK_ERROR_MESSAGE);
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    }
-
-    load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [taskId]);
+  const comments = data ?? [];
+  const loadError = queryError ? loadErrorMessage(queryError) : null;
 
   const addComment = useCallback(
     async (text: string): Promise<boolean> => {
@@ -105,50 +83,17 @@ export function useTaskComments(taskId: string): UseTaskCommentsResult {
       setSubmitError(null);
 
       try {
-        const response = await fetch(`/api/tasks/${taskId}/comments`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ text }),
-        });
-
-        if (response.status === 401) {
-          setSubmitError(SUBMIT_SESSION_EXPIRED_MESSAGE);
-          return false;
-        }
-        if (response.status === 403) {
-          setSubmitError(SUBMIT_FORBIDDEN_MESSAGE);
-          return false;
-        }
-        if (response.status === 404) {
-          setSubmitError(SUBMIT_NOT_FOUND_MESSAGE);
-          return false;
-        }
-        if (response.status === 400) {
-          setSubmitError(SUBMIT_VALIDATION_ERROR_MESSAGE);
-          return false;
-        }
-        if (!response.ok) {
-          setSubmitError(SUBMIT_UNEXPECTED_ERROR_MESSAGE);
-          return false;
-        }
-
-        const json = (await response.json().catch(() => null)) as { data?: CommentWithAuthor } | null;
-        if (!json?.data) {
-          setSubmitError(SUBMIT_UNEXPECTED_ERROR_MESSAGE);
-          return false;
-        }
-
-        setComments((current) => [...current, json.data!]);
+        await createComment({ taskId, text }).unwrap();
         return true;
-      } catch {
-        setSubmitError(SUBMIT_NETWORK_ERROR_MESSAGE);
+      } catch (error) {
+        setSubmitError(submitErrorMessage(error));
         return false;
       } finally {
         isSubmittingRef.current = false;
         setIsSubmitting(false);
       }
     },
-    [taskId],
+    [createComment, taskId],
   );
 
   return { comments, isLoading, loadError, addComment, isSubmitting, submitError };

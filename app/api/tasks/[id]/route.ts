@@ -48,8 +48,12 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       return jsonError(403, "You do not have permission to edit this task");
     case "invalid_parent":
       return jsonError(400, "Invalid parentId");
+    case "invalid_dependsOn":
+      return jsonError(400, "Invalid dependsOn");
     case "cycle":
       return jsonError(409, "Update would create a dependency cycle");
+    case "blocked":
+      return jsonError(422, "Task cannot be completed while an incomplete dependency blocks it");
     case "ok":
       return jsonOk({ task: result.task, cascade: result.cascade });
   }

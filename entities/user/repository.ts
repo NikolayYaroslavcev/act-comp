@@ -1,4 +1,5 @@
 import { getDb, saveDb } from "@/shared/lib/db";
+import { appendActivity } from "@/entities/activity/repository";
 import { mergeSettings, settingsEqual } from "@/entities/user/model";
 import type { UpdateSettingsInput } from "@/entities/user/requests";
 import type { Settings, User } from "@/entities/user/schema";
@@ -20,7 +21,11 @@ export type UpdateUserSettingsOutcome =
   | { status: "not_found" }
   | { status: "ok"; settings: Settings };
 
-export function updateUserSettings(userId: string, patch: UpdateSettingsInput): UpdateUserSettingsOutcome {
+export function updateUserSettings(
+  userId: string,
+  patch: UpdateSettingsInput,
+  now: Date = new Date(),
+): UpdateUserSettingsOutcome {
   const db = getDb();
   const existing = db.users[userId];
   if (!existing) {
@@ -30,6 +35,17 @@ export function updateUserSettings(userId: string, patch: UpdateSettingsInput): 
   const nextSettings = mergeSettings(existing.settings, patch);
   if (settingsEqual(existing.settings, nextSettings)) {
     return { status: "ok", settings: existing.settings };
+  }
+
+  if (nextSettings.workDayHours !== existing.settings.workDayHours) {
+    appendActivity(db, {
+      entityType: "user",
+      entityId: userId,
+      action: "work_day_hours_changed",
+      at: now.toISOString(),
+      byUserId: userId,
+      metadata: { field: "workDayHours", old: existing.settings.workDayHours, new: nextSettings.workDayHours },
+    });
   }
 
   db.users[userId] = { ...existing, settings: nextSettings };

@@ -33,5 +33,5 @@ export function cloneTaskForUser(userId: string, taskId: string): CloneTaskOutco
     return { status: "forbidden" };
   }
 
-  return cloneTaskInRepository(taskId);
+  return cloneTaskInRepository(taskId, new Date(), userId);
 }

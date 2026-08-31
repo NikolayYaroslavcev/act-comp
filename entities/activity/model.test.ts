@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findLatestActivityAmong } from "@/entities/activity/model";
+import { findLatestActivityAmong, describeTaskActivity } from "@/entities/activity/model";
 import type { Activity } from "@/entities/activity/schema";
 
 function makeActivity(overrides: Partial<Activity>): Activity {
@@ -43,5 +43,41 @@ describe("findLatestActivityAmong", () => {
   it("ignores activity for ids outside the set", () => {
     const unrelated = makeActivity({ id: "a1", entityType: "task", entityId: "t99" });
     expect(findLatestActivityAmong(new Set(["l1", "t1"]), [unrelated])).toBeNull();
+  });
+});
+
+describe("describeTaskActivity", () => {
+  it("describes a priority change with actor, old and new values", () => {
+    expect(
+      describeTaskActivity(
+        {
+          id: "a1",
+          entityType: "task",
+          entityId: "t1",
+          action: "updated",
+          at: "2026-08-30T10:00:00.000Z",
+          byUserId: "u1",
+          metadata: { field: "priority", old: 3, new: 5 },
+        },
+        "Николай",
+      ).summary,
+    ).toBe("Николай изменил приоритет: 3 → 5");
+  });
+
+  it("describes a rollback without treating it as a field update", () => {
+    expect(
+      describeTaskActivity(
+        {
+          id: "a2",
+          entityType: "task",
+          entityId: "t1",
+          action: "rolled_back",
+          at: "2026-08-30T10:00:00.000Z",
+          byUserId: "u1",
+          metadata: { historyIndex: 0 },
+        },
+        "Николай",
+      ).summary,
+    ).toBe("Николай откатил задачу к предыдущей версии");
   });
 });

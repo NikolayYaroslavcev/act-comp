@@ -12,9 +12,12 @@ interface TaskDefaultsSectionProps {
 export function TaskDefaultsSection({ register, errors, disabled }: TaskDefaultsSectionProps) {
   return (
     <section className="flex flex-col gap-3" aria-labelledby="settings-defaults-heading">
-      <h2 id="settings-defaults-heading" className="text-sm font-semibold">
-        Значения по умолчанию для новых задач
-      </h2>
+      <div className="space-y-1">
+        <h2 id="settings-defaults-heading" className="text-sm font-semibold">
+          Значения по умолчанию для новых задач
+        </h2>
+        <p className="text-xs text-muted-foreground">Применяются при создании новой задачи в любом списке.</p>
+      </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="settings-default-priority">Приоритет по умолчанию</Label>

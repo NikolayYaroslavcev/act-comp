@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { PDFDocument } from "pdf-lib";
-import { generateTaskListPdf } from "./pdf";
+import { generateTaskDetailPdf, generateTaskListPdf } from "./pdf";
 import type { Task } from "@/entities/task/schema";
 
 function makeTask(overrides: Partial<Task> = {}): Task {
@@ -107,6 +107,88 @@ describe("generateTaskListPdf", () => {
     const bytes = await generateTaskListPdf({
       listTitle: "Большой список",
       tasks,
+      exportedAt: EXPORTED_AT,
+      fontBytes: FONT,
+    });
+    const doc = await PDFDocument.load(bytes);
+    expect(doc.getPageCount()).toBeGreaterThan(1);
+  });
+});
+
+describe("generateTaskDetailPdf", () => {
+  it("creates a non-empty PDF titled with the task code and title", async () => {
+    const bytes = await generateTaskDetailPdf({
+      task: makeTask({ code: "AB-1", title: "Deploy" }),
+      parentCode: null,
+      dependencyCodes: [],
+      exportedAt: EXPORTED_AT,
+      fontBytes: FONT,
+    });
+    expect(bytes.byteLength).toBeGreaterThan(1000);
+    const doc = await PDFDocument.load(bytes);
+    expect(doc.getTitle()).toBe("AB-1 Deploy");
+    expect(doc.getPageCount()).toBeGreaterThanOrEqual(1);
+  });
+
+  it("embeds Cyrillic title and description without mangling", async () => {
+    const bytes = await generateTaskDetailPdf({
+      task: makeTask({
+        code: "RU-1",
+        title: "Проверить кириллицу",
+        description: "Подробное описание задачи",
+        category: "Бэкенд",
+        tags: ["срочно"],
+        status: "in_progress",
+        priority: 4,
+        deadline: "2026-09-01T00:00:00.000Z",
+        estimatedMin: 90,
+        timeSpentMin: 30,
+      }),
+      parentCode: null,
+      dependencyCodes: [],
+      exportedAt: EXPORTED_AT,
+      fontBytes: FONT,
+    });
+    const doc = await PDFDocument.load(bytes);
+    expect(doc.getTitle()).toBe("RU-1 Проверить кириллицу");
+    expect(doc.getKeywords()).toContain("Подробное описание задачи");
+    expect(doc.getKeywords()).toContain("Бэкенд");
+    expect(doc.getKeywords()).toContain("срочно");
+  });
+
+  it("includes the parent code and dependency codes when provided", async () => {
+    const bytes = await generateTaskDetailPdf({
+      task: makeTask({ code: "C-1", title: "Child", parentId: "p1", dependsOn: ["b1", "b2"] }),
+      parentCode: "P-1",
+      dependencyCodes: ["B-1", "B-2"],
+      exportedAt: EXPORTED_AT,
+      fontBytes: FONT,
+    });
+    const doc = await PDFDocument.load(bytes);
+    expect(doc.getKeywords()).toContain("P-1");
+    expect(doc.getKeywords()).toContain("B-1");
+    expect(doc.getKeywords()).toContain("B-2");
+  });
+
+  it("shows predictable placeholders for null/empty fields", async () => {
+    const bytes = await generateTaskDetailPdf({
+      task: makeTask({ description: "", category: null, tags: [], deadline: null }),
+      parentCode: null,
+      dependencyCodes: [],
+      exportedAt: EXPORTED_AT,
+      fontBytes: FONT,
+    });
+    expect(bytes.byteLength).toBeGreaterThan(0);
+    const doc = await PDFDocument.load(bytes);
+    expect(doc.getPageCount()).toBeGreaterThanOrEqual(1);
+  });
+
+  it("paginates a long description onto more than one page without truncation", async () => {
+    const longDescription = "Очень длинное описание задачи с деталями и контекстом. ".repeat(120);
+    const bytes = await generateTaskDetailPdf({
+      task: makeTask({ description: longDescription, title: "Большая задача" }),
+      parentCode: null,
+      dependencyCodes: [],
       exportedAt: EXPORTED_AT,
       fontBytes: FONT,
     });

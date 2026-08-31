@@ -7,15 +7,21 @@ import {
   calculateParentProgress,
   calculatePriority,
   canRestoreTask,
+  createSimilarTaskHistoryProvider,
   computeParentSyncUpdates,
   countTasksByStatus,
   DependencyCycleError,
   detectCycle,
   diffTaskChanges,
+  elapsedSinceCreatedMs,
   filterTasks,
   getCascadeUpdates,
   groupTasksByKanbanColumn,
   applyKanbanStatusOverrides,
+  listRestorableTaskVersions,
+  parseTimeExtension,
+  previewTaskRollback,
+  reconstructUpdatableStateBeforeHistoryIndex,
   isTaskBlocked,
   isTaskOverdue,
   KANBAN_STATUSES,
@@ -24,6 +30,7 @@ import {
   selectVisibleTasks,
   sortTasksForKanbanColumn,
   topoSort,
+  validateDependsOnAssignment,
   validateParentAssignment,
 } from "@/entities/task/model";
 import type { TaskHistoryProvider } from "@/entities/task/model";
@@ -398,6 +405,128 @@ describe("calculatePriority", () => {
     calculatePriority(blocker, tasks, noHistory, NOW);
 
     expect(tasks).toEqual(snapshot);
+  });
+
+  it("reduces priority by 2 when blocked by an incomplete dependency", () => {
+    const prerequisite = makeTask({ id: "t1", priority: 3, status: "new" });
+    const blocked = makeTask({ id: "t2", priority: 3, status: "new", dependsOn: ["t1"] });
+    expect(calculatePriority(blocked, [prerequisite, blocked], noHistory, NOW)).toBe(1);
+  });
+
+  it("does not reduce priority when the dependency is already done", () => {
+    const prerequisite = makeTask({ id: "t1", priority: 3, status: "done" });
+    const blocked = makeTask({ id: "t2", priority: 3, status: "new", dependsOn: ["t1"] });
+    expect(calculatePriority(blocked, [prerequisite, blocked], noHistory, NOW)).toBe(3);
+  });
+
+  it("does not reduce priority when the only unresolved dependency is soft-deleted", () => {
+    const prerequisite = makeTask({ id: "t1", priority: 3, status: "new", deletedAt: "2026-08-01T00:00:00.000Z" });
+    const blocked = makeTask({ id: "t2", priority: 3, status: "new", dependsOn: ["t1"] });
+    expect(calculatePriority(blocked, [prerequisite, blocked], noHistory, NOW)).toBe(3);
+  });
+
+  it("does not reduce priority when dependsOn references a task not present in allTasks", () => {
+    const task = makeTask({ priority: 3, status: "new", dependsOn: ["missing"] });
+    expect(calculatePriority(task, [task], noHistory, NOW)).toBe(3);
+  });
+
+  it("floors the result at 0 rather than going negative", () => {
+    const prerequisite = makeTask({ id: "t1", priority: 1, status: "new" });
+    const blocked = makeTask({ id: "t2", priority: 1, status: "new", dependsOn: ["t1"] });
+    expect(calculatePriority(blocked, [prerequisite, blocked], noHistory, NOW)).toBe(0);
+  });
+
+  it("combines being a blocker for one task and blocked by another in the same score", () => {
+    // t1 -> t2 -> t3 (t2 depends on t1, t3 depends on t2): t2 is both a
+    // blocker (t3 can't proceed) and blocked (t1 isn't done), so both
+    // adjustments apply to its own score.
+    const t1 = makeTask({ id: "t1", priority: 2, status: "new" });
+    const t2 = makeTask({ id: "t2", priority: 2, status: "new", dependsOn: ["t1"] });
+    const t3 = makeTask({ id: "t3", priority: 1, status: "new", dependsOn: ["t2"] });
+    expect(calculatePriority(t2, [t1, t2, t3], noHistory, NOW)).toBe(5);
+  });
+
+  it("does not treat a done task as blocked even with an incomplete dependency", () => {
+    const prerequisite = makeTask({ id: "t1", priority: 3, status: "new" });
+    const done = makeTask({ id: "t2", priority: 3, status: "done", dependsOn: ["t1"] });
+    expect(calculatePriority(done, [prerequisite, done], noHistory, NOW)).toBe(3);
+  });
+
+  it("never returns NaN when the task's own priority is not a finite number", () => {
+    const task = makeTask({ priority: Number.NaN, status: "new" });
+    expect(calculatePriority(task, [task], noHistory, NOW)).toBe(0);
+  });
+
+  it("never returns Infinity when the task's own priority is not finite", () => {
+    const task = makeTask({ priority: Number.POSITIVE_INFINITY, status: "new" });
+    expect(Number.isFinite(calculatePriority(task, [task], noHistory, NOW))).toBe(true);
+  });
+});
+
+describe("createSimilarTaskHistoryProvider", () => {
+  const NOW = new Date("2026-08-27T12:00:00.000Z");
+
+  it("returns null when the task has no category", () => {
+    const task = makeTask({ category: null });
+    const provider = createSimilarTaskHistoryProvider([task]);
+    expect(provider(task)).toBeNull();
+  });
+
+  it("returns null when there are no completed tasks in the same category", () => {
+    const task = makeTask({ id: "t1", category: "Backend", status: "new" });
+    const otherCategory = makeTask({ id: "t2", category: "Frontend", status: "done", timeSpentMin: 90 });
+    const provider = createSimilarTaskHistoryProvider([task, otherCategory]);
+    expect(provider(task)).toBeNull();
+  });
+
+  it("does not use the task itself as its own history", () => {
+    const task = makeTask({ id: "t1", category: "Backend", status: "done", timeSpentMin: 500 });
+    const provider = createSimilarTaskHistoryProvider([task]);
+    expect(provider(task)).toBeNull();
+  });
+
+  it("averages timeSpentMin across completed tasks in the same category", () => {
+    const task = makeTask({ id: "t1", category: "Backend", status: "new" });
+    const done1 = makeTask({ id: "t2", category: "Backend", status: "done", timeSpentMin: 60 });
+    const done2 = makeTask({ id: "t3", category: "Backend", status: "done", timeSpentMin: 120 });
+    const provider = createSimilarTaskHistoryProvider([task, done1, done2]);
+    expect(provider(task)).toEqual({ averageActualMinutes: 90 });
+  });
+
+  it("excludes completed tasks that are soft-deleted", () => {
+    const task = makeTask({ id: "t1", category: "Backend", status: "new" });
+    const done = makeTask({ id: "t2", category: "Backend", status: "done", timeSpentMin: 60 });
+    const deleted = makeTask({
+      id: "t3",
+      category: "Backend",
+      status: "done",
+      timeSpentMin: 600,
+      deletedAt: "2026-08-01T00:00:00.000Z",
+    });
+    const provider = createSimilarTaskHistoryProvider([task, done, deleted]);
+    expect(provider(task)).toEqual({ averageActualMinutes: 60 });
+  });
+
+  it("excludes tasks that are not done, even in the same category", () => {
+    const task = makeTask({ id: "t1", category: "Backend", status: "new" });
+    const done = makeTask({ id: "t2", category: "Backend", status: "done", timeSpentMin: 60 });
+    const inProgress = makeTask({ id: "t3", category: "Backend", status: "in_progress", timeSpentMin: 999 });
+    const provider = createSimilarTaskHistoryProvider([task, done, inProgress]);
+    expect(provider(task)).toEqual({ averageActualMinutes: 60 });
+  });
+
+  it("is deterministic for the same inputs", () => {
+    const task = makeTask({ id: "t1", category: "Backend", status: "new" });
+    const done = makeTask({ id: "t2", category: "Backend", status: "done", timeSpentMin: 60 });
+    const provider = createSimilarTaskHistoryProvider([task, done]);
+    expect(provider(task)).toEqual(provider(task));
+  });
+
+  it("composes with calculatePriority to boost when similar tasks historically overran the estimate", () => {
+    const task = makeTask({ id: "t1", category: "Backend", status: "new", priority: 2, estimatedMin: 60 });
+    const done = makeTask({ id: "t2", category: "Backend", status: "done", timeSpentMin: 90 });
+    const provider = createSimilarTaskHistoryProvider([task, done]);
+    expect(calculatePriority(task, [task, done], provider, NOW)).toBe(5);
   });
 });
 
@@ -889,6 +1018,41 @@ function byId(tasks: Task[]): Map<string, Task> {
   return new Map(tasks.map((task) => [task.id, task]));
 }
 
+describe("validateDependsOnAssignment", () => {
+  it("accepts a dependency in the same list", () => {
+    const blocker = makeTask({ id: "b1", listId: "l1" });
+    const task = makeTask({ id: "t1", listId: "l1" });
+
+    expect(validateDependsOnAssignment(task, ["b1"], byId([blocker, task]))).toBeNull();
+  });
+
+  it("rejects a self dependency", () => {
+    const task = makeTask({ id: "t1", listId: "l1" });
+
+    expect(validateDependsOnAssignment(task, ["t1"], byId([task]))).toBe("self");
+  });
+
+  it("rejects an unknown dependency id", () => {
+    const task = makeTask({ id: "t1", listId: "l1" });
+
+    expect(validateDependsOnAssignment(task, ["missing"], byId([task]))).toBe("not_found");
+  });
+
+  it("rejects a deleted dependency", () => {
+    const blocker = makeTask({ id: "b1", listId: "l1", deletedAt: "2026-08-01T00:00:00.000Z" });
+    const task = makeTask({ id: "t1", listId: "l1" });
+
+    expect(validateDependsOnAssignment(task, ["b1"], byId([blocker, task]))).toBe("deleted");
+  });
+
+  it("rejects a dependency from another list", () => {
+    const blocker = makeTask({ id: "b1", listId: "other" });
+    const task = makeTask({ id: "t1", listId: "l1" });
+
+    expect(validateDependsOnAssignment(task, ["b1"], byId([blocker, task]))).toBe("different_list");
+  });
+});
+
 describe("validateParentAssignment", () => {
   it("accepts a parent in the same list", () => {
     const parent = makeTask({ id: "p1", listId: "l1" });
@@ -1010,6 +1174,15 @@ describe("computeParentSyncUpdates", () => {
     const child = makeTask({ id: "c1", parentId: "missing-old" });
 
     const updates = computeParentSyncUpdates(child.id, "missing-old", "missing-new", byId([child]));
+
+    expect(updates).toEqual([]);
+  });
+
+  it("does not emit updates for a parent in a different list than the child", () => {
+    const parent = makeTask({ id: "p-foreign", listId: "list-b", subtaskIds: [] });
+    const child = makeTask({ id: "c-foreign", listId: "list-a", parentId: null });
+
+    const updates = computeParentSyncUpdates(child.id, null, "p-foreign", byId([parent, child]));
 
     expect(updates).toEqual([]);
   });
@@ -1448,5 +1621,309 @@ describe("applyKanbanStatusOverrides", () => {
       "in_progress",
       "done",
     ]);
+  });
+});
+
+describe("reconstructUpdatableStateBeforeHistoryIndex", () => {
+  const T1 = "2026-08-10T10:00:00.000Z";
+  const T2 = "2026-08-11T10:00:00.000Z";
+  const T3 = "2026-08-12T10:00:00.000Z";
+
+  it("restores the updatable fields as they were before the selected mutation", () => {
+    const task = makeTask({
+      title: "C",
+      priority: 5,
+      history: [
+        { field: "title", old: "A", new: "B", at: T1, byUserId: "u1" },
+        { field: "title", old: "B", new: "C", at: T2, byUserId: "u1" },
+        { field: "priority", old: 3, new: 5, at: T3, byUserId: "u1" },
+      ],
+    });
+
+    const result = reconstructUpdatableStateBeforeHistoryIndex(task, 1);
+
+    expect(result).toEqual({
+      status: "ok",
+      snapshot: {
+        title: "B",
+        description: "",
+        status: "new",
+        priority: 3,
+        category: null,
+        tags: [],
+        deadline: null,
+        estimatedMin: 0,
+        dependsOn: [],
+        parentId: null,
+      },
+    });
+  });
+
+  it("does not mutate the current task while computing a snapshot", () => {
+    const history = [{ field: "title" as const, old: "A", new: "B", at: T1, byUserId: "u1" }];
+    const task = makeTask({ title: "B", history });
+    const historyBefore = [...task.history];
+
+    reconstructUpdatableStateBeforeHistoryIndex(task, 0);
+
+    expect(task.title).toBe("B");
+    expect(task.history).toEqual(historyBefore);
+  });
+
+  it("leaves server-owned and runtime fields out of the snapshot", () => {
+    const task = makeTask({
+      title: "B",
+      timeSpentMin: 40,
+      timerStartedAt: T2,
+      timerPausedAt: T3,
+      deletedAt: null,
+      history: [
+        { field: "title", old: "A", new: "B", at: T1, byUserId: "u1" },
+        { field: "timeSpentMin", old: 0, new: 40, at: T2, byUserId: "u1" },
+      ],
+    });
+
+    const result = reconstructUpdatableStateBeforeHistoryIndex(task, 0);
+
+    expect(result.status).toBe("ok");
+    if (result.status === "ok") {
+      expect(result.snapshot).not.toHaveProperty("id");
+      expect(result.snapshot).not.toHaveProperty("code");
+      expect(result.snapshot).not.toHaveProperty("listId");
+      expect(result.snapshot).not.toHaveProperty("createdAt");
+      expect(result.snapshot).not.toHaveProperty("history");
+      expect(result.snapshot).not.toHaveProperty("deletedAt");
+      expect(result.snapshot).not.toHaveProperty("timerStartedAt");
+      expect(result.snapshot).not.toHaveProperty("timeSpentMin");
+      expect(result.snapshot).not.toHaveProperty("extensions");
+    }
+  });
+
+  it("rejects an unknown history index", () => {
+    const task = makeTask({
+      title: "B",
+      history: [{ field: "title", old: "A", new: "B", at: T1, byUserId: "u1" }],
+    });
+
+    expect(reconstructUpdatableStateBeforeHistoryIndex(task, 4)).toEqual({ status: "unknown_version" });
+    expect(reconstructUpdatableStateBeforeHistoryIndex(task, -1)).toEqual({ status: "unknown_version" });
+  });
+
+  it("rejects a history entry that is not a user-updatable field", () => {
+    const task = makeTask({
+      title: "A",
+      timeSpentMin: 10,
+      history: [{ field: "timeSpentMin", old: 0, new: 10, at: T1, byUserId: "u1" }],
+    });
+
+    expect(reconstructUpdatableStateBeforeHistoryIndex(task, 0)).toEqual({ status: "unknown_version" });
+  });
+
+  it("replays history in order so an older version is restored correctly", () => {
+    const task = makeTask({
+      title: "D",
+      description: "third",
+      history: [
+        { field: "title", old: "A", new: "B", at: T1, byUserId: "u1" },
+        { field: "description", old: "", new: "second", at: T2, byUserId: "u1" },
+        { field: "title", old: "B", new: "D", at: T3, byUserId: "u1" },
+        { field: "description", old: "second", new: "third", at: T3, byUserId: "u1" },
+      ],
+    });
+
+    const oldest = reconstructUpdatableStateBeforeHistoryIndex(task, 0);
+    expect(oldest.status).toBe("ok");
+    if (oldest.status === "ok") {
+      expect(oldest.snapshot.title).toBe("A");
+      expect(oldest.snapshot.description).toBe("");
+    }
+
+    const middle = reconstructUpdatableStateBeforeHistoryIndex(task, 1);
+    expect(middle.status).toBe("ok");
+    if (middle.status === "ok") {
+      expect(middle.snapshot.title).toBe("B");
+      expect(middle.snapshot.description).toBe("");
+    }
+  });
+
+  it("treats same-timestamp field changes as one mutation", () => {
+    const task = makeTask({
+      title: "New",
+      priority: 5,
+      history: [
+        { field: "title", old: "Old", new: "New", at: T1, byUserId: "u1" },
+        { field: "priority", old: 2, new: 5, at: T1, byUserId: "u1" },
+      ],
+    });
+
+    const fromFirst = reconstructUpdatableStateBeforeHistoryIndex(task, 0);
+    const fromSecond = reconstructUpdatableStateBeforeHistoryIndex(task, 1);
+
+    expect(fromFirst).toEqual(fromSecond);
+    if (fromFirst.status === "ok") {
+      expect(fromFirst.snapshot.title).toBe("Old");
+      expect(fromFirst.snapshot.priority).toBe(2);
+    }
+  });
+
+  it("clones array fields so restoring tags does not alias the current task", () => {
+    const task = makeTask({
+      tags: ["b"],
+      history: [{ field: "tags", old: ["a"], new: ["b"], at: T1, byUserId: "u1" }],
+    });
+
+    const result = reconstructUpdatableStateBeforeHistoryIndex(task, 0);
+    expect(result.status).toBe("ok");
+    if (result.status === "ok") {
+      expect(result.snapshot.tags).toEqual(["a"]);
+      result.snapshot.tags.push("mutated");
+      expect(task.tags).toEqual(["b"]);
+    }
+  });
+});
+
+describe("listRestorableTaskVersions", () => {
+  const T1 = "2026-08-10T10:00:00.000Z";
+  const T2 = "2026-08-11T10:00:00.000Z";
+
+  it("lists updatable mutations and skips runtime history", () => {
+    const task = makeTask({
+      title: "B",
+      history: [
+        { field: "title", old: "A", new: "B", at: T1, byUserId: "u1" },
+        { field: "timeSpentMin", old: 0, new: 5, at: T2, byUserId: "u1" },
+      ],
+    });
+
+    expect(listRestorableTaskVersions(task)).toEqual([
+      { historyIndex: 0, at: T1, byUserId: "u1", fields: ["title"] },
+    ]);
+  });
+
+  it("groups same-timestamp updatable changes into one version", () => {
+    const task = makeTask({
+      title: "New",
+      priority: 5,
+      history: [
+        { field: "title", old: "Old", new: "New", at: T1, byUserId: "u1" },
+        { field: "priority", old: 2, new: 5, at: T1, byUserId: "u1" },
+      ],
+    });
+
+    expect(listRestorableTaskVersions(task)).toEqual([
+      { historyIndex: 0, at: T1, byUserId: "u1", fields: ["title", "priority"] },
+    ]);
+  });
+});
+
+describe("previewTaskRollback", () => {
+  const T1 = "2026-08-10T10:00:00.000Z";
+
+  it("describes only the fields that would change", () => {
+    const task = makeTask({
+      title: "B",
+      priority: 3,
+      history: [{ field: "title", old: "A", new: "B", at: T1, byUserId: "u1" }],
+    });
+
+    expect(previewTaskRollback(task, 0)).toEqual({
+      status: "ok",
+      at: T1,
+      byUserId: "u1",
+      changes: [{ field: "title", current: "B", restored: "A" }],
+    });
+  });
+});
+
+describe("parseTimeExtension", () => {
+  it("parses %1h% as a 60 minute extension", () => {
+    expect(parseTimeExtension("%1h%")).toEqual({ addedMin: 60 });
+  });
+
+  it("parses %30m% as a 30 minute extension", () => {
+    expect(parseTimeExtension("%30m%")).toEqual({ addedMin: 30 });
+  });
+
+  it("finds the extension anywhere inside surrounding comment text", () => {
+    expect(parseTimeExtension("Extending by %30m% because scope grew")).toEqual({ addedMin: 30 });
+  });
+
+  it("returns null for plain text with no extension syntax", () => {
+    expect(parseTimeExtension("Just a regular comment")).toBeNull();
+  });
+
+  it("returns null for malformed syntax with no recognized unit", () => {
+    expect(parseTimeExtension("%1x%")).toBeNull();
+  });
+
+  it("returns null for a zero-minute extension", () => {
+    expect(parseTimeExtension("%0h%")).toBeNull();
+  });
+
+  it("returns null when the amount is missing", () => {
+    expect(parseTimeExtension("%h%")).toBeNull();
+  });
+
+  it("is case-insensitive on the unit letter", () => {
+    expect(parseTimeExtension("%1H%")).toEqual({ addedMin: 60 });
+  });
+
+  it("applies only the first extension when a comment contains more than one", () => {
+    expect(parseTimeExtension("%1h% and also %30m%")).toEqual({ addedMin: 60 });
+  });
+
+  it("parses the combined %5h 10m% marker as a single 310 minute extension", () => {
+    expect(parseTimeExtension("%5h 10m%")).toEqual({ addedMin: 310 });
+  });
+
+  it("parses combined hours+minutes case-insensitively", () => {
+    expect(parseTimeExtension("Need %5H 10M% more")).toEqual({ addedMin: 310 });
+  });
+
+  it("does not treat %5h 10m% as two separate markers", () => {
+    expect(parseTimeExtension("%5h 10m%")).toEqual({ addedMin: 310 });
+    expect(parseTimeExtension("%5h 10m%")).not.toEqual({ addedMin: 300 });
+    expect(parseTimeExtension("%5h 10m%")).not.toEqual({ addedMin: 10 });
+  });
+
+  it("prefers the earlier marker when a combined token follows a simple one", () => {
+    expect(parseTimeExtension("%1h% then %5h 10m%")).toEqual({ addedMin: 60 });
+  });
+
+  it("uses the combined token when it appears first", () => {
+    expect(parseTimeExtension("%5h 10m% then %1h%")).toEqual({ addedMin: 310 });
+  });
+
+  it("returns null for a combined marker with a zero hours or minutes part", () => {
+    expect(parseTimeExtension("%0h 10m%")).toBeNull();
+    expect(parseTimeExtension("%5h 0m%")).toBeNull();
+  });
+});
+
+describe("elapsedSinceCreatedMs", () => {
+  it("is 0 right at creation", () => {
+    expect(elapsedSinceCreatedMs({ createdAt: "2026-08-01T00:00:00.000Z" }, new Date("2026-08-01T00:00:00.000Z"))).toBe(
+      0,
+    );
+  });
+
+  it("measures wall-clock time since createdAt, in milliseconds", () => {
+    const createdAt = "2026-08-01T00:00:00.000Z";
+    const now = new Date("2026-08-02T01:30:00.000Z");
+    expect(elapsedSinceCreatedMs({ createdAt }, now)).toBe((25 * 60 + 30) * 60 * 1000);
+  });
+
+  it("is independent of the Timer's own timerStartedAt/timerPausedAt", () => {
+    const createdAt = "2026-08-01T00:00:00.000Z";
+    const now = new Date("2026-08-01T02:00:00.000Z");
+    const withPausedTimer = { createdAt, timerStartedAt: "2026-08-01T01:00:00.000Z", timerPausedAt: "2026-08-01T01:30:00.000Z" };
+    const withNoTimer = { createdAt, timerStartedAt: null, timerPausedAt: null };
+    expect(elapsedSinceCreatedMs(withPausedTimer, now)).toBe(elapsedSinceCreatedMs(withNoTimer, now));
+  });
+
+  it("never returns a negative duration, even if `now` is somehow before createdAt", () => {
+    expect(elapsedSinceCreatedMs({ createdAt: "2026-08-02T00:00:00.000Z" }, new Date("2026-08-01T00:00:00.000Z"))).toBe(
+      0,
+    );
   });
 });

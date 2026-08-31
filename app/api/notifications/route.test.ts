@@ -6,6 +6,7 @@ import { createSession, revokeSession } from "@/entities/session/repository";
 import { getDb, saveDb } from "@/shared/lib/db";
 import { notificationKey } from "@/entities/notification/model";
 import { listAckedNotificationKeys } from "@/entities/notification/repository";
+import { updateUserSettings } from "@/entities/user/repository";
 
 function notificationsRequest(method: "GET" | "PATCH", sessionId?: string, body?: unknown) {
   return new NextRequest("http://localhost/api/notifications", {
@@ -60,6 +61,31 @@ describe("GET /api/notifications", () => {
     expect(ownerJson.data.some((item: { key: string }) => item.key === key)).toBe(true);
     expect(otherJson.data.some((item: { key: string }) => item.key === key)).toBe(false);
   });
+
+  it("delivers a workDayHours notification through the full save -> GET -> ack path", async () => {
+    updateUserSettings("u1", { workDayHours: 5 });
+
+    const ownerSession = sessionFor("u1", "78");
+    const otherSession = sessionFor("u2", "79");
+
+    const ownerResponse = await GET(notificationsRequest("GET", ownerSession.id));
+    const ownerJson = await ownerResponse.json();
+    const notification = ownerJson.data.find((item: { kind: string }) => item.kind === "work_day_hours_changed");
+    expect(notification).toBeDefined();
+
+    const otherResponse = await GET(notificationsRequest("GET", otherSession.id));
+    const otherJson = await otherResponse.json();
+    expect(otherJson.data.some((item: { kind: string }) => item.kind === "work_day_hours_changed")).toBe(false);
+
+    const ackResponse = await PATCH(
+      notificationsRequest("PATCH", ownerSession.id, { keys: [notification.key] }),
+    );
+    expect(ackResponse.status).toBe(200);
+
+    const afterAck = await GET(notificationsRequest("GET", ownerSession.id));
+    const afterAckJson = await afterAck.json();
+    expect(afterAckJson.data.some((item: { key: string }) => item.key === notification.key)).toBe(false);
+  });
 });
 
 describe("PATCH /api/notifications", () => {
@@ -83,9 +109,13 @@ describe("PATCH /api/notifications", () => {
     expect(response.status).toBe(400);
   });
 
-  it("acks keys for the current user only", async () => {
+  it("acks currently due keys for the current user only", async () => {
+    const db = getDb();
+    db.tasks.t8 = { ...db.tasks.t8, timeSpentMin: 23 };
+    saveDb(db);
+
     const session = sessionFor("u1", "74");
-    const key = "time_threshold:t-isolated:75";
+    const key = notificationKey("time_threshold", "t8", 75);
 
     const response = await PATCH(notificationsRequest("PATCH", session.id, { keys: [key] }));
     const json = await response.json();
@@ -94,5 +124,38 @@ describe("PATCH /api/notifications", () => {
     expect(json.data).toContain(key);
     expect(listAckedNotificationKeys("u1")).toContain(key);
     expect(listAckedNotificationKeys("u2")).not.toContain(key);
+  });
+
+  it("rejects an arbitrary key that is not currently due", async () => {
+    const session = sessionFor("u1", "75");
+    const key = "time_threshold:t-isolated:75";
+
+    const response = await PATCH(notificationsRequest("PATCH", session.id, { keys: [key] }));
+
+    expect(response.status).toBe(400);
+    expect(listAckedNotificationKeys("u1")).not.toContain(key);
+  });
+
+  it("rejects a well-formed key for another user's task", async () => {
+    const db = getDb();
+    db.tasks.t8 = { ...db.tasks.t8, timeSpentMin: 23 };
+    saveDb(db);
+
+    const session = sessionFor("u3", "76");
+    const key = notificationKey("time_threshold", "t8", 75);
+
+    const response = await PATCH(notificationsRequest("PATCH", session.id, { keys: [key] }));
+
+    expect(response.status).toBe(400);
+    expect(listAckedNotificationKeys("u3")).not.toContain(key);
+  });
+
+  it("rejects a malformed notification key", async () => {
+    const session = sessionFor("u1", "77");
+
+    const response = await PATCH(notificationsRequest("PATCH", session.id, { keys: ["not-a-notification"] }));
+
+    expect(response.status).toBe(400);
+    expect(listAckedNotificationKeys("u1")).not.toContain("not-a-notification");
   });
 });

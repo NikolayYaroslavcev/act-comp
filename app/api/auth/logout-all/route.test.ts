@@ -15,7 +15,8 @@ async function loginAndGetSession() {
     }),
   );
   const json = await response.json();
-  return { sessionId: json.data.session.id as string, userId: json.data.user.id as string };
+  const sessionId = response.cookies.get(SESSION_COOKIE_NAME)?.value as string;
+  return { sessionId, userId: json.data.user.id as string };
 }
 
 function logoutAllRequest(sessionId?: string) {
@@ -110,6 +111,30 @@ describe("POST /api/auth/logout-all", () => {
     await logoutAll(logoutAllRequest(sessionId));
 
     expect(getCurrentSession(otherOwnSession.id)).toBeNull();
+  });
+
+  it("ignores a spoofed userId in the body and only revokes the current user's sessions", async () => {
+    const { sessionId } = await loginAndGetSession();
+    const otherUserSession = createSession({
+      userId: "spoofed-user-id",
+      ip: "192.0.2.24 (demo)",
+      device: "Chrome on Windows",
+      rememberMe: false,
+    });
+
+    const response = await logoutAll(
+      new NextRequest("http://localhost/api/auth/logout-all", {
+        method: "POST",
+        headers: {
+          cookie: `${SESSION_COOKIE_NAME}=${sessionId}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ userId: "spoofed-user-id" }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(findSessionById(otherUserSession.id)?.revokedAt).toBeNull();
   });
 
   it("returns 401 when no cookie is present", async () => {

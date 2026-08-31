@@ -17,7 +17,7 @@ afterEach(() => {
 
 describe("useLogin", () => {
   it("returns the login result and clears pending state on success", async () => {
-    const loginResult = { user: { id: "u1", email: CREDENTIALS.email }, session: { id: "s1" } };
+    const loginResult = { user: { id: "u1", email: CREDENTIALS.email } };
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(jsonResponse(200, { data: loginResult }))
@@ -58,7 +58,7 @@ describe("useLogin", () => {
 
     await waitFor(() => expect(result.current.isPending).toBe(true));
 
-    resolveFetch(jsonResponse(200, { data: { user: {}, session: {} } }));
+    resolveFetch(jsonResponse(200, { data: { user: {} } }));
     await act(async () => {
       await loginPromise;
     });

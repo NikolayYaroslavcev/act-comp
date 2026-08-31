@@ -5,6 +5,7 @@ import { SESSION_COOKIE_NAME } from "@/features/auth/session-cookie";
 import { createSession } from "@/entities/session/repository";
 import { createList, findListById } from "@/entities/list/repository";
 import { findTaskById } from "@/entities/task/repository";
+import { updateUserSettings } from "@/entities/user/repository";
 
 function tasksRequest(sessionId?: string, query?: string) {
   return new NextRequest(`http://localhost/api/tasks${query ?? ""}`, {
@@ -156,6 +157,42 @@ describe("POST /api/tasks", () => {
     expect(findTaskById(json.data.id)).toBeDefined();
   });
 
+  it("applies the creating user's settings.taskDefaults when priority/category/estimatedMin are omitted", async () => {
+    const session = sessionFor("u1", "84a");
+    updateUserSettings("u1", { taskDefaults: { priority: 5, category: "Backend", estimatedMin: 45 } });
+    const list = createList("u1", { title: "List", template: "work", deadline: null });
+
+    const response = await POST(createTaskRequest(session.id, { listId: list.id, title: "New task" }));
+
+    expect(response.status).toBe(201);
+    const json = await response.json();
+    expect(json.data.priority).toBe(5);
+    expect(json.data.category).toBe("Backend");
+    expect(json.data.estimatedMin).toBe(45);
+  });
+
+  it("respects explicit priority/category/estimatedMin over the user's taskDefaults", async () => {
+    const session = sessionFor("u1", "84b");
+    updateUserSettings("u1", { taskDefaults: { priority: 5, category: "Backend", estimatedMin: 45 } });
+    const list = createList("u1", { title: "List", template: "work", deadline: null });
+
+    const response = await POST(
+      createTaskRequest(session.id, {
+        listId: list.id,
+        title: "New task",
+        priority: 1,
+        category: null,
+        estimatedMin: 0,
+      }),
+    );
+
+    expect(response.status).toBe(201);
+    const json = await response.json();
+    expect(json.data.priority).toBe(1);
+    expect(json.data.category).toBeNull();
+    expect(json.data.estimatedMin).toBe(0);
+  });
+
   it("allows an edit-access shared user to create a task", async () => {
     const session = sessionFor("u2", "85");
     const list = createList("u1", { title: "List", template: "work", deadline: null });
@@ -182,5 +219,39 @@ describe("POST /api/tasks", () => {
     );
 
     expect(response.status).toBe(403);
+  });
+
+  it("returns 400 when parentId points at a task in another list", async () => {
+    const session = sessionFor("u1", "87");
+    const listA = createList("u1", { title: "A", template: "work", deadline: null });
+    const listB = createList("u2", { title: "B", template: "work", deadline: null });
+    const parentResponse = await POST(
+      createTaskRequest(sessionFor("u2", "88").id, { listId: listB.id, title: "B parent" }),
+    );
+    const parentJson = await parentResponse.json();
+
+    const response = await POST(
+      createTaskRequest(session.id, { listId: listA.id, title: "Child", parentId: parentJson.data.id }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(findTaskById(parentJson.data.id)!.subtaskIds).toEqual([]);
+  });
+
+  it("creates a child under a same-list parent", async () => {
+    const session = sessionFor("u1", "89");
+    const list = createList("u1", { title: "List", template: "work", deadline: null });
+    const parentResponse = await POST(
+      createTaskRequest(session.id, { listId: list.id, title: "Parent" }),
+    );
+    const parentJson = await parentResponse.json();
+
+    const response = await POST(
+      createTaskRequest(session.id, { listId: list.id, title: "Child", parentId: parentJson.data.id }),
+    );
+
+    expect(response.status).toBe(201);
+    const json = await response.json();
+    expect(json.data.parentId).toBe(parentJson.data.id);
   });
 });

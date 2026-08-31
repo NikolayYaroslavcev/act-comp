@@ -1,11 +1,13 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { createSession } from "@/entities/session/repository";
-import { createList, findListById } from "@/entities/list/repository";
+import { createList, findListById, updateList } from "@/entities/list/repository";
 import { createTask, insertTasks } from "@/entities/task/repository";
 import type { CreateTaskInput } from "@/entities/task/requests";
 import { SESSION_COOKIE_NAME } from "@/features/auth/session-cookie";
 import ListDetailPage from "./page";
+import { renderWithStore as render } from "@/shared/store/test-utils";
 
 const redirectMock = vi.fn();
 const cookiesMock = vi.fn();
@@ -121,6 +123,19 @@ describe("ListDetailPage — accessible lists", () => {
     expect(screen.getByText("First task")).toBeInTheDocument();
     expect(screen.getByTestId("list-access-badge")).toHaveTextContent("Владелец");
     expect(screen.getByTestId("list-export")).toBeInTheDocument();
+  });
+
+  it("shows the list's real edit history in the History dialog", async () => {
+    const list = createList(OWNER, { title: "Sprint tasks", template: "work", deadline: null });
+    updateList(list.id, OWNER, { title: "Renamed sprint" });
+    const session = sessionFor(OWNER);
+    cookiesMock.mockResolvedValue(cookieJar(session.id));
+
+    const user = userEvent.setup();
+    await renderPage(list.id);
+    await user.click(screen.getByRole("button", { name: "История" }));
+
+    expect(screen.getByText(/Sprint tasks → Renamed sprint/)).toBeInTheDocument();
   });
 
   it("renders the list detail for a shared read-only viewer", async () => {

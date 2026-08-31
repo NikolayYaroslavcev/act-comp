@@ -1,11 +1,37 @@
 import { describe, expect, it } from "vitest";
 import data from "@/data.json";
+import { z } from "zod";
 import { databaseSchema } from "@/entities/database/schema";
+
+type DatabaseInput = z.input<typeof databaseSchema>;
 
 describe("databaseSchema", () => {
   it("parses data.json as a valid normalized database", () => {
     const result = databaseSchema.safeParse(data);
     expect(result.success).toBe(true);
+  });
+
+  it("accepts timer and rollback activity actions persisted in local state", () => {
+    const db = structuredClone(data) as DatabaseInput;
+    db.activityLog["a-timer-started"] = {
+      id: "a-timer-started",
+      entityType: "task",
+      entityId: "t1",
+      action: "timer_started",
+      at: "2026-08-30T08:41:04.310Z",
+      byUserId: "u1",
+    };
+    db.activityLog["a-rolled-back"] = {
+      id: "a-rolled-back",
+      entityType: "task",
+      entityId: "t1",
+      action: "rolled_back",
+      at: "2026-08-30T08:41:05.510Z",
+      byUserId: "u1",
+      metadata: { historyIndex: 0 },
+    };
+
+    expect(databaseSchema.safeParse(db).success).toBe(true);
   });
 
   it("contains seed data for every required entity collection", () => {
@@ -18,6 +44,7 @@ describe("databaseSchema", () => {
     expect(Object.keys(db.activityLog).length).toBeGreaterThan(0);
     expect(Object.keys(db.savedFilters).length).toBeGreaterThan(0);
     expect(db.notificationAcks).toEqual({});
+    expect(db.attachments).toEqual({});
   });
 
   it("has a soft-deleted list and a soft-deleted task", () => {

@@ -37,14 +37,21 @@ function makeTask(overrides: Partial<Task> = {}): Task {
   };
 }
 
+async function openMenu(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByTestId("list-export-trigger"));
+  await waitFor(() => expect(screen.getByTestId("list-export-csv")).toBeInTheDocument());
+}
+
 describe("ExportActions", () => {
   beforeEach(() => {
     vi.mocked(downloadBlob).mockReset();
     vi.unstubAllGlobals();
   });
 
-  it("renders CSV and PDF export actions", () => {
+  it("renders CSV and PDF export actions", async () => {
+    const user = userEvent.setup();
     render(<ExportActions listId="l1" listTitle="Спринт" tasks={[]} />);
+    await openMenu(user);
     expect(screen.getByTestId("list-export-csv")).toBeInTheDocument();
     expect(screen.getByTestId("list-export-pdf")).toBeInTheDocument();
   });
@@ -52,6 +59,7 @@ describe("ExportActions", () => {
   it("downloads a header-only CSV when there are no tasks", async () => {
     const user = userEvent.setup();
     render(<ExportActions listId="l1" listTitle="Спринт" tasks={[]} />);
+    await openMenu(user);
     await user.click(screen.getByTestId("list-export-csv"));
 
     expect(downloadBlob).toHaveBeenCalledTimes(1);
@@ -75,6 +83,7 @@ describe("ExportActions", () => {
         lookupTasks={tasks}
       />,
     );
+    await openMenu(user);
     await user.click(screen.getByTestId("list-export-csv"));
 
     const text = await vi.mocked(downloadBlob).mock.calls[0][0].text();
@@ -95,11 +104,11 @@ describe("ExportActions", () => {
       ),
     );
     render(<ExportActions listId="l1" listTitle="Work" tasks={[makeTask()]} />);
+    await openMenu(user);
     const click = user.click(screen.getByTestId("list-export-pdf"));
-    await waitFor(() => expect(screen.getByTestId("list-export-pdf")).toBeDisabled());
-    expect(screen.getByTestId("list-export-csv")).toBeDisabled();
+    await waitFor(() => expect(screen.getByTestId("list-export-trigger")).toBeDisabled());
     expect(fetch).toHaveBeenCalledTimes(1);
-    await user.click(screen.getByTestId("list-export-pdf"));
+    await user.click(screen.getByTestId("list-export-trigger"));
     expect(fetch).toHaveBeenCalledTimes(1);
     resolvePdf(new Response(new Uint8Array([37, 80, 68, 70]), { status: 200 }));
     await click;
@@ -109,6 +118,7 @@ describe("ExportActions", () => {
     const user = userEvent.setup();
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 500 })));
     render(<ExportActions listId="l1" listTitle="Work" tasks={[makeTask()]} />);
+    await openMenu(user);
     await user.click(screen.getByTestId("list-export-pdf"));
     expect(screen.getByRole("alert")).toHaveTextContent("Не удалось сформировать PDF");
   });

@@ -1,8 +1,10 @@
+import { memo } from "react";
 import type { Task } from "@/entities/task/schema";
 import { isTaskOverdue } from "@/entities/task/model";
 import { Badge } from "@/shared/ui/badge";
 import { HighlightedText } from "@/shared/ui/highlighted-text";
 import { cn } from "@/shared/lib/utils";
+import { formatDate } from "@/shared/lib/format-date";
 
 interface TaskRowProps {
   task: Task;
@@ -24,15 +26,13 @@ const STATUS_BADGE_VARIANT = {
   done: "muted",
 } as const;
 
-const deadlineFormatter = new Intl.DateTimeFormat("ru", { dateStyle: "medium" });
-
-export function TaskRow({ task, dependencyCodes, now = new Date(), searchQuery, onOpen }: TaskRowProps) {
+export const TaskRow = memo(function TaskRow({ task, dependencyCodes, now = new Date(), searchQuery, onOpen }: TaskRowProps) {
   const overdue = isTaskOverdue(task, now);
   const completed = task.status === "done";
 
   const rowClassName = cn(
-    "flex flex-col gap-2 rounded-lg border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between",
-    onOpen && "w-full text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+    "flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between",
+    onOpen && "w-full text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring",
   );
 
   const content = (
@@ -42,7 +42,7 @@ export function TaskRow({ task, dependencyCodes, now = new Date(), searchQuery, 
           <span className="font-mono text-xs text-muted-foreground">
             <HighlightedText text={task.code} query={searchQuery} />
           </span>
-          <span className={cn("text-sm font-medium break-words", completed && "line-through")}>
+          <span className={cn("text-sm font-semibold break-words", completed && "line-through")}>
             <HighlightedText text={task.title} query={searchQuery} />
           </span>
           {overdue && (
@@ -86,7 +86,7 @@ export function TaskRow({ task, dependencyCodes, now = new Date(), searchQuery, 
           className={cn("tabular-nums text-muted-foreground", overdue && "font-medium text-destructive")}
           data-testid="task-deadline"
         >
-          {task.deadline ? deadlineFormatter.format(new Date(task.deadline)) : "Без дедлайна"}
+          {task.deadline ? formatDate(task.deadline) : "Без дедлайна"}
         </span>
       </div>
     </>
@@ -105,4 +105,4 @@ export function TaskRow({ task, dependencyCodes, now = new Date(), searchQuery, 
       )}
     </li>
   );
-}
+});

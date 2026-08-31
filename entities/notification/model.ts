@@ -1,31 +1,43 @@
 import type { TaskList } from "@/entities/list/schema";
+import { elapsedMinutes, TIME_THRESHOLDS, type TimeThreshold } from "@/entities/task/model";
 import type { Task } from "@/entities/task/schema";
-import type { NotificationSettings } from "@/entities/user/schema";
+import { DEFAULT_SETTINGS, type NotificationSettings } from "@/entities/user/schema";
 
-export const TIME_THRESHOLDS = [75, 90, 100] as const;
-export type TimeThreshold = (typeof TIME_THRESHOLDS)[number];
+// Re-exported for existing call sites — the constant now lives in
+// entities/task/model.ts (also used by the Timer countdown's colour tiers)
+// since entities/notification/model.ts already depends on that module, and
+// defining it here too would risk a circular value import.
+export { TIME_THRESHOLDS };
+export type { TimeThreshold };
 
 export const DEADLINE_REMINDER_MINUTES = [15, 10, 5] as const;
 export type DeadlineReminderMinutes = (typeof DEADLINE_REMINDER_MINUTES)[number];
 
-export type NotificationKind = "time_threshold" | "deadline_reminder";
+export type NotificationKind = "time_threshold" | "deadline_reminder" | "work_day_hours_changed";
 
 export interface DueNotification {
   key: string;
   kind: NotificationKind;
-  entityType: "task" | "list";
+  entityType: "task" | "list" | "user";
   entityId: string;
-  threshold: TimeThreshold | DeadlineReminderMinutes;
+  threshold: TimeThreshold | DeadlineReminderMinutes | null;
   title: string;
   body: string;
+}
+
+/** A single real change of a user's `workDayHours`, keyed by the activity entry that recorded it. */
+export interface WorkDayHoursChangeEvent {
+  id: string;
+  previousHours: number;
+  newHours: number;
 }
 
 const MS_PER_MINUTE = 60_000;
 
 /**
  * Elapsed / estimated time thresholds. `elapsedMin` is the current spent
- * figure (today: stored `timeSpentMin`; later a work-hours engine can pass
- * a calendar-aware elapsed value through the same argument).
+ * figure from `elapsedMinutes` (committed `timeSpentMin` plus calendar-aware
+ * running session), not a second formula.
  */
 export function getCrossedTimeThresholds(elapsedMin: number, estimatedMin: number): TimeThreshold[] {
   if (!Number.isFinite(elapsedMin) || !Number.isFinite(estimatedMin)) {
@@ -54,7 +66,7 @@ export function getCrossedDeadlineReminders(nowMs: number, deadlineMs: number): 
 export function notificationKey(
   kind: NotificationKind,
   entityId: string,
-  threshold: TimeThreshold | DeadlineReminderMinutes,
+  threshold: TimeThreshold | DeadlineReminderMinutes | null,
 ): string {
   return `${kind}:${entityId}:${threshold}`;
 }
@@ -89,8 +101,8 @@ function listHasOpenWork(list: TaskList, tasks: Task[]): boolean {
   return belonging.some((task) => task.status !== "done");
 }
 
-function thresholdNotifications(task: Task): DueNotification[] {
-  return getCrossedTimeThresholds(task.timeSpentMin, task.estimatedMin).map((threshold) => ({
+function thresholdNotifications(task: Task, now: Date, workDayHours: number): DueNotification[] {
+  return getCrossedTimeThresholds(elapsedMinutes(task, now, workDayHours), task.estimatedMin).map((threshold) => ({
     key: notificationKey("time_threshold", task.id, threshold),
     kind: "time_threshold",
     entityType: "task",
@@ -118,22 +130,37 @@ function deadlineNotifications(list: TaskList, nowMs: number): DueNotification[]
   }));
 }
 
+function workDayHoursNotifications(events: WorkDayHoursChangeEvent[]): DueNotification[] {
+  return events.map((event) => ({
+    key: notificationKey("work_day_hours_changed", event.id, null),
+    kind: "work_day_hours_changed",
+    entityType: "user",
+    entityId: event.id,
+    threshold: null,
+    title: "Рабочий день изменён",
+    body: `Рабочий день изменён с ${event.previousHours} ч на ${event.newHours} ч. Время по задачам и подзадачам пересчитано.`,
+  }));
+}
+
 export function evaluateNotifications(input: {
   lists: TaskList[];
   tasks: Task[];
   settings: NotificationSettings;
   now: Date;
   seenKeys: ReadonlySet<string>;
+  workDayHours?: number;
+  workDayHoursChanges?: WorkDayHoursChangeEvent[];
 }): DueNotification[] {
   const candidates: DueNotification[] = [];
   const nowMs = input.now.getTime();
+  const workDayHours = input.workDayHours ?? DEFAULT_SETTINGS.workDayHours;
 
   if (input.settings.timeThresholdAlerts) {
     for (const task of input.tasks) {
       if (!isOpenTask(task)) {
         continue;
       }
-      candidates.push(...thresholdNotifications(task));
+      candidates.push(...thresholdNotifications(task, input.now, workDayHours));
     }
   }
 
@@ -147,6 +174,10 @@ export function evaluateNotifications(input: {
       }
       candidates.push(...deadlineNotifications(list, nowMs));
     }
+  }
+
+  if (input.settings.workHoursRecalculation && input.workDayHoursChanges) {
+    candidates.push(...workDayHoursNotifications(input.workDayHoursChanges));
   }
 
   return selectUnseenNotifications(candidates, input.seenKeys);

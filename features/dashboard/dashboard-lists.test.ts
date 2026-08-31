@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { getDashboardLists } from "@/features/dashboard/dashboard-lists";
+import { getDashboardLists, getDeletedDashboardLists } from "@/features/dashboard/dashboard-lists";
+import { createList, findListById } from "@/entities/list/repository";
 
 function findById(lists: ReturnType<typeof getDashboardLists>, id: string) {
   const list = lists.find((entry) => entry.id === id);
@@ -24,6 +25,47 @@ describe("getDashboardLists", () => {
     expect(list.taskCount).toBe(6);
     expect(list.statusCounts).toEqual({ new: 3, in_progress: 1, done: 2 });
     expect(list.progress).toBe(33);
+  });
+
+  it("computes a separate overdue count on top of the status counts", () => {
+    const NOW = new Date("2026-08-27T12:00:00.000Z");
+    const l1 = findById(getDashboardLists("u1", NOW), "l1");
+    const l3 = findById(getDashboardLists("u1", NOW), "l3");
+
+    expect(l1.overdueCount).toBe(1);
+    expect(l3.overdueCount).toBe(0);
+  });
+
+  it("counts an in-progress overdue task in both its status count and the overdue count", () => {
+    const NOW = new Date("2026-08-27T12:00:00.000Z");
+    const l1 = findById(getDashboardLists("u1", NOW), "l1");
+
+    expect(l1.statusCounts.in_progress).toBeGreaterThanOrEqual(l1.overdueCount);
+    expect(l1.overdueCount).toBeGreaterThan(0);
+  });
+
+  it("flags a list whose latest activity is 30+ days old as an archive candidate", () => {
+    const STALE_NOW = new Date("2026-09-18T14:00:00.000Z");
+    const l1 = findById(getDashboardLists("u1", STALE_NOW), "l1");
+    const l2 = findById(getDashboardLists("u1", STALE_NOW), "l2");
+
+    expect(l1.isArchiveCandidate).toBe(true);
+    expect(l2.isArchiveCandidate).toBe(false);
+  });
+
+  it("does not flag a list as an archive candidate when its activity is recent relative to `now`", () => {
+    const RECENT_NOW = new Date("2026-08-27T12:00:00.000Z");
+    const l1 = findById(getDashboardLists("u1", RECENT_NOW), "l1");
+    expect(l1.isArchiveCandidate).toBe(false);
+  });
+
+  it("computes urgency from the list's tasks and own deadline", () => {
+    const NOW = new Date("2026-08-27T12:00:00.000Z");
+    const l1 = findById(getDashboardLists("u1", NOW), "l1");
+    const l5 = findById(getDashboardLists("u1", NOW), "l5");
+
+    expect(l1.urgency).toBe("urgent");
+    expect(l5.urgency).toBe("normal");
   });
 
   it("returns 0 progress for a list with no completed tasks", () => {
@@ -102,5 +144,93 @@ describe("getDashboardLists priority sorting", () => {
 
   it("returns an empty array for a user with no visible lists", () => {
     expect(getDashboardLists("u3", NOW)).toEqual([]);
+  });
+});
+
+describe("getDashboardLists canDelete", () => {
+  it("marks canDelete true for a list the user owns", () => {
+    const list = findById(getDashboardLists("u1"), "l1");
+    expect(list.canDelete).toBe(true);
+  });
+
+  it("marks canDelete false for a list only shared as read-only", () => {
+    const list = findById(getDashboardLists("u1"), "l3");
+    expect(list.canDelete).toBe(false);
+  });
+
+  it("marks canDelete false for a list shared with edit access", () => {
+    const list = findById(getDashboardLists("u2"), "l1");
+    expect(list.canDelete).toBe(false);
+  });
+});
+
+describe("getDashboardLists canEdit", () => {
+  it("marks canEdit true for a list the user owns", () => {
+    const list = findById(getDashboardLists("u1"), "l1");
+    expect(list.canEdit).toBe(true);
+  });
+
+  it("marks canEdit true for a list shared with edit access", () => {
+    const list = findById(getDashboardLists("u2"), "l1");
+    expect(list.canEdit).toBe(true);
+  });
+
+  it("marks canEdit false for a list only shared as read-only", () => {
+    const list = findById(getDashboardLists("u1"), "l3");
+    expect(list.canEdit).toBe(false);
+  });
+});
+
+describe("getDashboardLists template and deadline", () => {
+  it("includes the list's template and deadline for prefilling edit forms", () => {
+    const list = findById(getDashboardLists("u1"), "l1");
+    expect(list.template).toBe("work");
+    expect(list.deadline).toBe("2026-09-10T18:00:00.000Z");
+  });
+
+  it("includes a null deadline for a list without one", () => {
+    const list = findById(getDashboardLists("u1"), "l2");
+    expect(list.deadline).toBeNull();
+  });
+});
+
+describe("getDeletedDashboardLists", () => {
+  const NOW = new Date("2026-08-27T12:00:00.000Z");
+
+  it("returns the caller's own soft-deleted lists within the restore window", () => {
+    const ids = getDeletedDashboardLists("u1", NOW).map((list) => list.id);
+    expect(ids).toContain("l4");
+  });
+
+  it("includes the title and deletion timestamp", () => {
+    const list = getDeletedDashboardLists("u1", NOW).find((entry) => entry.id === "l4");
+    expect(list?.title).toBe("Старый список (удалён)");
+    expect(list?.deletedAt).toBe("2026-08-10T09:00:00.000Z");
+  });
+
+  it("excludes active (non-deleted) lists", () => {
+    const ids = getDeletedDashboardLists("u1", NOW).map((list) => list.id);
+    expect(ids).not.toContain("l1");
+  });
+
+  it("excludes a soft-deleted list owned by someone else, even if shared with the caller", () => {
+    const list = createList("u2", { title: "Shared then deleted", template: "work", deadline: null });
+    findListById(list.id)!.sharedWith.push({ userId: "u1", access: "edit" });
+    findListById(list.id)!.deletedAt = NOW.toISOString();
+
+    const ids = getDeletedDashboardLists("u1", NOW).map((entry) => entry.id);
+    expect(ids).not.toContain(list.id);
+  });
+
+  it("excludes a soft-deleted list past the 30-day restore window", () => {
+    const list = createList("u1", { title: "Long gone", template: "work", deadline: null });
+    findListById(list.id)!.deletedAt = "2026-01-01T00:00:00.000Z";
+
+    const ids = getDeletedDashboardLists("u1", NOW).map((entry) => entry.id);
+    expect(ids).not.toContain(list.id);
+  });
+
+  it("returns an empty array for a user with no deleted lists", () => {
+    expect(getDeletedDashboardLists("u3", NOW)).toEqual([]);
   });
 });

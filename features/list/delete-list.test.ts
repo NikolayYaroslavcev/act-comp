@@ -14,12 +14,12 @@ describe("deleteList use-case", () => {
     }
   });
 
-  it("does not allow a user who is not the owner to delete the list", () => {
+  it("returns not_found for a user with no relation to the list (cannot view it)", () => {
     const list = createList("u-usecase-delete-owner2", { title: "Old", template: "work", deadline: null });
 
     const result = deleteList("someone-else", list.id);
 
-    expect(result).toEqual({ status: "forbidden" });
+    expect(result).toEqual({ status: "not_found" });
     expect(findListById(list.id)?.deletedAt).toBeNull();
   });
 

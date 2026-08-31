@@ -1,9 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Task } from "@/entities/task/schema";
 import { applyTaskQuery, type TaskFilters } from "@/entities/task/model";
-import { EMPTY_TASK_FILTER_CRITERIA, type TaskFilterCriteria } from "@/entities/saved-filter/query-schema";
+import { EMPTY_TASK_FILTER_CRITERIA, normalizeTaskFilterCriteria, type TaskFilterCriteria } from "@/entities/saved-filter/query-schema";
 
 function toTaskFilters(criteria: TaskFilterCriteria): TaskFilters {
   return {
@@ -17,6 +17,8 @@ function toTaskFilters(criteria: TaskFilterCriteria): TaskFilters {
   };
 }
 
+export const TASK_SEARCH_DEBOUNCE_MS = 350;
+
 export interface UseTaskFiltersResult {
   draft: TaskFilterCriteria;
   setDraft: (criteria: TaskFilterCriteria) => void;
@@ -28,10 +30,9 @@ export interface UseTaskFiltersResult {
 }
 
 /**
- * Draft vs applied is deliberate: typing/toggling controls only updates
- * `draft` (cheap, local), and filteredTasks/appliedSearch — the things
- * that drive re-rendering the task list and recording a recent filter —
- * only change on an explicit apply()/clear()/restore().
+ * Structured filters stay draft-until-apply. Text search applies after a
+ * short debounce so keypresses do not recompute the list on every character.
+ * Apply/clear/restore still apply immediately and cancel a pending search timer.
  */
 export function useTaskFilters(tasks: Task[]): UseTaskFiltersResult {
   const [draft, setDraft] = useState<TaskFilterCriteria>(EMPTY_TASK_FILTER_CRITERIA);
@@ -42,6 +43,20 @@ export function useTaskFilters(tasks: Task[]): UseTaskFiltersResult {
     [tasks, applied],
   );
 
+  useEffect(() => {
+    if (draft.search === applied.search) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setApplied((current) =>
+        current.search === draft.search ? current : { ...current, search: draft.search },
+      );
+    }, TASK_SEARCH_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [applied.search, draft.search]);
+
   return {
     draft,
     setDraft,
@@ -51,8 +66,9 @@ export function useTaskFilters(tasks: Task[]): UseTaskFiltersResult {
       setApplied(EMPTY_TASK_FILTER_CRITERIA);
     },
     restore: (criteria) => {
-      setDraft(criteria);
-      setApplied(criteria);
+      const next = normalizeTaskFilterCriteria(criteria);
+      setDraft(next);
+      setApplied(next);
     },
     filteredTasks,
     appliedSearch: applied.search,

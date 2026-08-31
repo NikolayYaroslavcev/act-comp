@@ -32,7 +32,6 @@ export const userSchema = z.object({
 
 export type Theme = z.infer<typeof themeSchema>;
 export type NotificationSettings = z.infer<typeof notificationSettingsSchema>;
-export type TaskDefaults = z.infer<typeof taskDefaultsSchema>;
 export type Settings = z.infer<typeof settingsSchema>;
 export type User = z.infer<typeof userSchema>;
 

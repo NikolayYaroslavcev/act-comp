@@ -1,8 +1,9 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { TaskComments } from "./task-comments";
 import type { CommentWithAuthor } from "@/entities/comment/dto";
+import { renderWithStore as render } from "@/shared/store/test-utils";
 
 function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), {
@@ -48,6 +49,26 @@ describe("TaskComments (list)", () => {
     expect(row).toHaveTextContent("user@example.com");
     expect(row).toHaveTextContent("Нужны фикстуры");
     expect(screen.getByTestId("task-comment-time")).not.toBeEmptyDOMElement();
+    expect(screen.queryByTestId("task-comments-pagination")).not.toBeInTheDocument();
+  });
+
+  it("paginates when there are more comments than one page", async () => {
+    const user = userEvent.setup();
+    const comments = Array.from({ length: 11 }, (_, index) =>
+      makeComment({ id: `c${index + 1}`, text: `Комментарий ${index + 1}` }),
+    );
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { data: comments })));
+
+    render(<TaskComments taskId="t1" />);
+
+    await waitFor(() => expect(screen.queryByTestId("task-comments-loading")).not.toBeInTheDocument());
+    expect(screen.getAllByTestId("task-comment")).toHaveLength(10);
+    expect(screen.queryByText("Комментарий 11", { exact: true })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Следующая страница" }));
+
+    expect(screen.getByText("Комментарий 11", { exact: true })).toBeInTheDocument();
+    expect(screen.getAllByTestId("task-comment")).toHaveLength(1);
   });
 
   it("shows an empty-state message when there are no comments", async () => {

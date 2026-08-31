@@ -58,6 +58,10 @@ describe("updateSettingsInputSchema", () => {
     expect(updateSettingsInputSchema.safeParse({ workDayHours: 25 }).success).toBe(false);
   });
 
+  it("accepts a valid workDayHours patch", () => {
+    expect(updateSettingsInputSchema.safeParse({ workDayHours: 8 }).success).toBe(true);
+  });
+
   it("rejects a priority outside 1-5", () => {
     expect(
       updateSettingsInputSchema.safeParse({ taskDefaults: { priority: 9 } }).success,

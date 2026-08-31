@@ -1,5 +1,26 @@
-import { revokeSessionForUser } from "@/entities/session/repository";
+import { deriveSessionDisplayId } from "@/entities/session/dto";
+import { getSessionsByUserId, revokeSessionForUser } from "@/entities/session/repository";
 
-export function revokeSession(sessionId: string, userId: string): void {
-  revokeSessionForUser(sessionId, userId);
+export interface RevokeSessionResult {
+  /** The real session id that was revoked, or null if displaySessionId did not resolve to one of the caller's own sessions. */
+  revokedSessionId: string | null;
+}
+
+/**
+ * `displaySessionId` is the opaque id GET /api/auth/sessions returns
+ * (entities/session/dto.ts:deriveSessionDisplayId) — never the real
+ * session.id/bearer credential. Resolving it back to a real session is
+ * scoped to the caller's own sessions, so it can't be used to probe or
+ * revoke another user's session even if their display id were somehow known.
+ */
+export function revokeSession(displaySessionId: string, userId: string): RevokeSessionResult {
+  const match = getSessionsByUserId(userId).find(
+    (session) => deriveSessionDisplayId(session.id) === displaySessionId,
+  );
+  if (!match) {
+    return { revokedSessionId: null };
+  }
+
+  revokeSessionForUser(match.id, userId);
+  return { revokedSessionId: match.id };
 }

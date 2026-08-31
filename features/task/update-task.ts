@@ -9,7 +9,9 @@ export type UpdateTaskOutcome =
   | { status: "not_found" }
   | { status: "forbidden" }
   | { status: "invalid_parent" }
+  | { status: "invalid_dependsOn" }
   | { status: "cycle" }
+  | { status: "blocked" }
   | { status: "ok"; task: Task; cascade: CascadeUpdate[] };
 
 export function updateTaskForUser(userId: string, taskId: string, input: UpdateTaskInput): UpdateTaskOutcome {

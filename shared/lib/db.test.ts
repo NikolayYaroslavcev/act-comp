@@ -129,4 +129,17 @@ describe("createFileDbStore", () => {
 
     expect(reader.getDb().notificationAcks.u1).toEqual(["time_threshold:t1:75"]);
   });
+
+  it("still loads the file when activityLog contains an action the current schema enum does not list", () => {
+    const filePath = tempFilePath();
+    const writer = createFileDbStore(filePath);
+    const db = writer.getDb();
+    const sample = Object.values(db.activityLog)[0];
+    expect(sample).toBeDefined();
+    db.activityLog["a-unknown-action"] = { ...sample, id: "a-unknown-action", action: "future_action" as never };
+    writer.saveDb(db);
+
+    const reader = createFileDbStore(filePath);
+    expect(reader.getDb().activityLog["a-unknown-action"]?.action).toBe("future_action");
+  });
 });

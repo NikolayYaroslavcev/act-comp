@@ -23,7 +23,6 @@ describe("WelcomeScreen", () => {
   it("greets the current user and shows the system statistics", () => {
     render(<WelcomeScreen user={user} stats={{ totalUsers: 3, totalTasks: 13 }} />);
 
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Добро пожаловать");
     expect(screen.getByText(/admin@example\.com/)).toBeInTheDocument();
     expect(screen.getByText("3")).toBeInTheDocument();
     expect(screen.getByText("13")).toBeInTheDocument();

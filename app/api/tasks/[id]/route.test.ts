@@ -317,6 +317,42 @@ describe("PATCH /api/tasks/[id]", () => {
     expect(json.data.task.deletedAt).toBeNull();
   });
 
+  it("accepts a same-list dependsOn update", async () => {
+    const session = sessionFor("u1", "111a");
+    const list = createList("u1", { title: "List", template: "work", deadline: null });
+    const blocker = makeTaskIn(list.id);
+    const task = makeTaskIn(list.id);
+
+    const response = await callPatch(task.id, patchRequest(task.id, session.id, { dependsOn: [blocker.id] }));
+
+    expect(response.status).toBe(200);
+    expect(findTaskById(task.id)!.dependsOn).toEqual([blocker.id]);
+  });
+
+  it("returns 400 for a dependsOn id from another list", async () => {
+    const session = sessionFor("u1", "111b");
+    const list = createList("u1", { title: "List", template: "work", deadline: null });
+    const other = createList("u1", { title: "Other", template: "work", deadline: null });
+    const foreign = makeTaskIn(other.id);
+    const task = makeTaskIn(list.id);
+
+    const response = await callPatch(task.id, patchRequest(task.id, session.id, { dependsOn: [foreign.id] }));
+
+    expect(response.status).toBe(400);
+    expect(findTaskById(task.id)!.dependsOn).toEqual([]);
+  });
+
+  it("returns 400 for a self dependsOn", async () => {
+    const session = sessionFor("u1", "111c");
+    const list = createList("u1", { title: "List", template: "work", deadline: null });
+    const task = makeTaskIn(list.id);
+
+    const response = await callPatch(task.id, patchRequest(task.id, session.id, { dependsOn: [task.id] }));
+
+    expect(response.status).toBe(400);
+    expect(findTaskById(task.id)!.dependsOn).toEqual([]);
+  });
+
   it("cannot move a task to another list via a spoofed listId", async () => {
     const session = sessionFor("u1", "112");
     const list = createList("u1", { title: "List", template: "work", deadline: null });
@@ -357,12 +393,27 @@ describe("PATCH /api/tasks/[id]", () => {
   it("returns 409 for a dependsOn update that would create a cycle, without saving it", async () => {
     const session = sessionFor("u1", "115");
     const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const a = makeTaskIn(list.id);
+    const b = makeTaskIn(list.id);
+    await callPatch(a.id, patchRequest(a.id, session.id, { dependsOn: [b.id] }));
 
-    const response = await callPatch(task.id, patchRequest(task.id, session.id, { dependsOn: [task.id] }));
+    const response = await callPatch(b.id, patchRequest(b.id, session.id, { dependsOn: [a.id] }));
 
     expect(response.status).toBe(409);
-    expect(findTaskById(task.id)!.dependsOn).toEqual([]);
+    expect(findTaskById(b.id)!.dependsOn).toEqual([]);
+  });
+
+  it("returns 422 when completing a task blocked by an incomplete dependency, without saving it", async () => {
+    const session = sessionFor("u1", "115a");
+    const list = createList("u1", { title: "List", template: "work", deadline: null });
+    const blocker = makeTaskIn(list.id);
+    const dependent = makeTaskIn(list.id);
+    await callPatch(dependent.id, patchRequest(dependent.id, session.id, { dependsOn: [blocker.id] }));
+
+    const response = await callPatch(dependent.id, patchRequest(dependent.id, session.id, { status: "done" }));
+
+    expect(response.status).toBe(422);
+    expect(findTaskById(dependent.id)!.status).toBe("new");
   });
 
   it("triggers a cascade recalculation for downstream tasks on status change", async () => {

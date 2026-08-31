@@ -8,11 +8,18 @@ import {
   elapsedMs,
   estimateProgressPercent,
   formatElapsedClock,
+  getTimerCountdownTier,
   getTimerState,
+  remainingMs,
+  type TimerCountdownTier,
 } from "@/entities/task/model";
+import { DEFAULT_SETTINGS } from "@/entities/user/schema";
 import { useTaskTimer } from "@/features/task/use-task-timer";
+import { useTimerInactivityPause } from "@/features/task/use-timer-inactivity-pause";
 import { Button } from "@/shared/ui/button";
 import { Progress } from "@/shared/ui/progress";
+import { cn } from "@/shared/lib/utils";
+import { formatDurationMinutes } from "@/shared/lib/format-duration";
 
 const STATE_LABELS = {
   stopped: "Остановлен",
@@ -20,13 +27,20 @@ const STATE_LABELS = {
   paused: "На паузе",
 } as const;
 
+const COUNTDOWN_TIER_CLASSNAME: Record<TimerCountdownTier, string> = {
+  normal: "",
+  warning: "text-warning",
+  urgent: "text-destructive",
+};
+
 interface TaskTimerProps {
   task: Task;
   canEdit: boolean;
   onTaskUpdated: (task: Task) => void;
+  workDayHours?: number;
 }
 
-export function TaskTimer({ task, canEdit, onTaskUpdated }: TaskTimerProps) {
+export function TaskTimer({ task, canEdit, onTaskUpdated, workDayHours = DEFAULT_SETTINGS.workDayHours }: TaskTimerProps) {
   const { controlTimer, isPending, error } = useTaskTimer();
   const [, setTick] = useState(0);
   const state = getTimerState(task);
@@ -53,9 +67,19 @@ export function TaskTimer({ task, canEdit, onTaskUpdated }: TaskTimerProps) {
     [blocked, controlTimer, isPending, onTaskUpdated, task.id],
   );
 
+  useTimerInactivityPause({
+    enabled: state === "running" && !blocked,
+    onPause: () => {
+      void handleAction("pause");
+    },
+  });
+
   const clock = new Date();
-  const elapsed = elapsedMs(task, clock);
-  const progress = estimateProgressPercent(elapsedMinutes(task, clock), task.estimatedMin);
+  const elapsed = elapsedMs(task, clock, workDayHours);
+  const progress = estimateProgressPercent(elapsedMinutes(task, clock, workDayHours), task.estimatedMin);
+  const remaining = remainingMs(task, clock, workDayHours);
+  const countdownTier = getTimerCountdownTier(task, clock, workDayHours);
+  const overrun = remaining !== null && remaining < 0;
   const unavailable =
     task.status === "done"
       ? "Таймер недоступен для завершённой задачи"
@@ -67,14 +91,31 @@ export function TaskTimer({ task, canEdit, onTaskUpdated }: TaskTimerProps) {
     <section className="flex flex-col gap-3 rounded-lg border border-border p-3" data-testid="task-timer">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div className="flex min-w-0 flex-col gap-1">
-          <p className="text-xs text-muted-foreground">Таймер</p>
-          <p
-            className="font-mono text-2xl tabular-nums"
-            data-testid="task-timer-elapsed"
-            aria-label={`Прошло ${formatElapsedClock(elapsed)}`}
-          >
-            {formatElapsedClock(elapsed)}
-          </p>
+          <p className="text-xs text-muted-foreground">{remaining !== null ? "Осталось времени" : "Таймер"}</p>
+          {remaining !== null ? (
+            <>
+              <p
+                className={cn("font-mono text-2xl tabular-nums", countdownTier && COUNTDOWN_TIER_CLASSNAME[countdownTier])}
+                data-testid="task-timer-remaining"
+                aria-label={
+                  overrun
+                    ? `Просрочено на ${formatElapsedClock(Math.abs(remaining))}`
+                    : `Осталось ${formatElapsedClock(remaining)}`
+                }
+              >
+                {formatElapsedClock(Math.abs(remaining))}
+              </p>
+              {overrun && <p className="text-xs font-medium text-destructive">Просрочено</p>}
+            </>
+          ) : (
+            <p
+              className="font-mono text-2xl tabular-nums"
+              data-testid="task-timer-elapsed"
+              aria-label={`Прошло ${formatElapsedClock(elapsed)}`}
+            >
+              {formatElapsedClock(elapsed)}
+            </p>
+          )}
         </div>
         <p
           className="text-sm font-medium"
@@ -88,7 +129,7 @@ export function TaskTimer({ task, canEdit, onTaskUpdated }: TaskTimerProps) {
       {task.estimatedMin > 0 && (
         <div className="flex flex-col gap-1.5">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span data-testid="task-timer-estimate">Оценка: {task.estimatedMin} мин</span>
+            <span data-testid="task-timer-estimate">Оценка: {formatDurationMinutes(task.estimatedMin)}</span>
             {progress !== null && (
               <span className="tabular-nums" data-testid="task-timer-progress">
                 {progress}%

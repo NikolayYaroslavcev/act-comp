@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import type { ListFilterCriteria } from "@/entities/saved-filter/list-query-schema";
 import type { TaskFilterCriteria } from "@/entities/saved-filter/query-schema";
-import type { SavedFilter } from "@/entities/saved-filter/schema";
+import type { SavedFilter, SavedFilterScope } from "@/entities/saved-filter/schema";
 
 const SESSION_EXPIRED_MESSAGE = "Сессия истекла. Войдите снова";
 const NETWORK_ERROR_MESSAGE = "Не удалось соединиться с сервером. Проверьте подключение к интернету";
@@ -15,14 +16,14 @@ interface SavedFilterGroups {
   saved: SavedFilter[];
 }
 
-export interface UseSavedFiltersResult {
+export interface UseSavedFiltersResult<TCriteria> {
   recent: SavedFilter[];
   saved: SavedFilter[];
   isLoading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
-  applyFilter: (criteria: TaskFilterCriteria) => Promise<SavedFilter | null>;
-  saveFilter: (criteria: TaskFilterCriteria, label: string | null) => Promise<SavedFilter | null>;
+  applyFilter: (criteria: TCriteria) => Promise<SavedFilter | null>;
+  saveFilter: (criteria: TCriteria, label: string | null) => Promise<SavedFilter | null>;
   touchFilter: (id: string) => Promise<SavedFilter | null>;
   deleteFilter: (id: string) => Promise<boolean>;
 }
@@ -37,9 +38,9 @@ type FetchSavedFilterGroupsResult = { ok: true; data: SavedFilterGroups } | { ok
  * duplicate the request/parsing logic. Deliberately does not touch state —
  * callers decide how (and whether) to apply the result.
  */
-async function fetchSavedFilterGroups(): Promise<FetchSavedFilterGroupsResult> {
+async function fetchSavedFilterGroups(scope: SavedFilterScope): Promise<FetchSavedFilterGroupsResult> {
   try {
-    const response = await fetch("/api/saved-filters?scope=tasks");
+    const response = await fetch(`/api/saved-filters?scope=${scope}`);
     if (response.status === 401) {
       return { ok: false, error: SESSION_EXPIRED_MESSAGE };
     }
@@ -56,22 +57,30 @@ async function fetchSavedFilterGroups(): Promise<FetchSavedFilterGroupsResult> {
   }
 }
 
-export function useSavedFilters(): UseSavedFiltersResult {
+/**
+ * Generic over the scope's criteria shape: existing callers (Task filters)
+ * keep calling useSavedFilters() with no arguments, unaffected — the scope
+ * defaults to "tasks" and the wire format is byte-identical to before.
+ * Passing scope="lists" (with TCriteria = ListFilterCriteria) is the only
+ * new behaviour, reusing this same request/error-handling plumbing rather
+ * than a second, parallel hook.
+ */
+export function useSavedFilters<TCriteria extends TaskFilterCriteria | ListFilterCriteria = TaskFilterCriteria>(
+  scope: SavedFilterScope = "tasks",
+): UseSavedFiltersResult<TCriteria> {
   const [groups, setGroups] = useState<SavedFilterGroups>(EMPTY_GROUPS);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    setIsLoading(true);
     setError(null);
-    const result = await fetchSavedFilterGroups();
+    const result = await fetchSavedFilterGroups(scope);
     if (result.ok) {
       setGroups(result.data);
     } else {
       setError(result.error);
     }
-    setIsLoading(false);
-  }, []);
+  }, [scope]);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,7 +89,7 @@ export function useSavedFilters(): UseSavedFiltersResult {
       setIsLoading(true);
       setError(null);
 
-      const result = await fetchSavedFilterGroups();
+      const result = await fetchSavedFilterGroups(scope);
       if (cancelled) {
         return;
       }
@@ -98,7 +107,7 @@ export function useSavedFilters(): UseSavedFiltersResult {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [scope]);
 
   const post = useCallback(
     async (body: unknown): Promise<SavedFilter | null> => {
@@ -116,6 +125,10 @@ export function useSavedFilters(): UseSavedFiltersResult {
         }
         if (response.status === 400) {
           setError(VALIDATION_ERROR_MESSAGE);
+          return null;
+        }
+        if (response.status === 404) {
+          setError(NOT_FOUND_MESSAGE);
           return null;
         }
         if (!response.ok) {
@@ -139,11 +152,15 @@ export function useSavedFilters(): UseSavedFiltersResult {
     [refresh],
   );
 
-  const applyFilter = useCallback((criteria: TaskFilterCriteria) => post({ action: "apply", criteria }), [post]);
+  const applyFilter = useCallback(
+    (criteria: TCriteria) => post(scope === "tasks" ? { action: "apply", criteria } : { action: "apply", scope, criteria }),
+    [post, scope],
+  );
 
   const saveFilter = useCallback(
-    (criteria: TaskFilterCriteria, label: string | null) => post({ action: "save", criteria, label }),
-    [post],
+    (criteria: TCriteria, label: string | null) =>
+      post(scope === "tasks" ? { action: "save", criteria, label } : { action: "save", scope, criteria, label }),
+    [post, scope],
   );
 
   const touchFilter = useCallback((id: string) => post({ action: "touch", id }), [post]);

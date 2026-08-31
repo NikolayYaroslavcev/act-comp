@@ -71,7 +71,32 @@ describe("SavedFiltersPanel", () => {
     );
 
     await user.click(screen.getByTestId("saved-filter-apply-r1"));
-    expect(onApplyFilter).toHaveBeenCalledWith("r1", expect.objectContaining({ search: "deploy" }));
+    expect(onApplyFilter).toHaveBeenCalledWith("r1", { ...EMPTY_TASK_FILTER_CRITERIA, search: "deploy" });
+  });
+
+  it("applies a named saved filter with criteria only, not the saved/label metadata", async () => {
+    const user = userEvent.setup();
+    const onApplyFilter = vi.fn();
+    const savedFilter = makeFilter({
+      id: "s1",
+      saved: true,
+      label: "Mine",
+      query: { ...EMPTY_TASK_FILTER_CRITERIA, status: ["new"], saved: true, label: "Mine" },
+    });
+    render(
+      <SavedFiltersPanel
+        recent={[]}
+        saved={[savedFilter]}
+        isLoading={false}
+        error={null}
+        onApplyFilter={onApplyFilter}
+        onSaveFilter={vi.fn()}
+        onDeleteFilter={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByTestId("saved-filter-apply-s1"));
+    expect(onApplyFilter).toHaveBeenCalledWith("s1", { ...EMPTY_TASK_FILTER_CRITERIA, status: ["new"] });
   });
 
   it("lists saved filters with a delete button", async () => {
@@ -143,5 +168,31 @@ describe("SavedFiltersPanel", () => {
     await user.click(screen.getByTestId("saved-filters-save"));
 
     expect(onSaveFilter).toHaveBeenCalledWith("My deploys");
+  });
+
+  it("paginates saved filters when there are more than one page", async () => {
+    const user = userEvent.setup();
+    const saved = Array.from({ length: 11 }, (_, index) =>
+      makeFilter({ id: `s${index + 1}`, saved: true, label: `Фильтр ${index + 1}` }),
+    );
+    render(
+      <SavedFiltersPanel
+        recent={[]}
+        saved={saved}
+        isLoading={false}
+        error={null}
+        onApplyFilter={vi.fn()}
+        onSaveFilter={vi.fn()}
+        onDeleteFilter={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Фильтр 1", { exact: true })).toBeInTheDocument();
+    expect(screen.queryByText("Фильтр 11", { exact: true })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Следующая страница" }));
+
+    expect(screen.getByText("Фильтр 11", { exact: true })).toBeInTheDocument();
+    expect(screen.queryByText("Фильтр 1", { exact: true })).not.toBeInTheDocument();
   });
 });

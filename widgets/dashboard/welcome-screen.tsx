@@ -1,5 +1,6 @@
 import type { PublicUser } from "@/entities/user/dto";
 import type { SystemStats } from "@/features/dashboard/system-stats";
+import { SystemStatsSummary } from "@/widgets/welcome/system-stats-summary";
 
 interface WelcomeScreenProps {
   user: PublicUser;
@@ -10,23 +11,16 @@ export function WelcomeScreen({ user, stats }: WelcomeScreenProps) {
   return (
     <div
       data-testid="welcome-screen"
-      className="motion-reduce:animate-none animate-in fade-in slide-in-from-bottom-4 duration-700 w-full max-w-sm rounded-xl border border-border bg-card p-6 text-card-foreground shadow-sm sm:p-8"
+      className="motion-reduce:animate-none animate-in fade-in slide-in-from-bottom-3 duration-500 ease-out flex flex-wrap items-center gap-x-6 gap-y-2"
     >
-      <div className="space-y-1.5 text-center">
-        <h1 className="text-xl font-semibold tracking-tight">Добро пожаловать!</h1>
-        <p className="text-sm text-muted-foreground">Вы вошли как {user.email}</p>
-      </div>
-
-      <dl className="mt-6 grid grid-cols-2 gap-3 text-center">
-        <div className="rounded-lg bg-muted/50 px-3 py-4">
-          <dt className="text-xs text-muted-foreground">Пользователей в системе</dt>
-          <dd className="mt-1 text-2xl font-semibold tabular-nums">{stats.totalUsers}</dd>
-        </div>
-        <div className="rounded-lg bg-muted/50 px-3 py-4">
-          <dt className="text-xs text-muted-foreground">Задач в системе</dt>
-          <dd className="mt-1 text-2xl font-semibold tabular-nums">{stats.totalTasks}</dd>
-        </div>
-      </dl>
+      <p className="motion-reduce:animate-none animate-in fade-in slide-in-from-bottom-1 duration-500 ease-out text-sm text-muted-foreground">
+        Вы вошли как {user.email}
+      </p>
+      <SystemStatsSummary
+        variant="compact"
+        stats={stats}
+        className="motion-reduce:animate-none animate-in fade-in slide-in-from-bottom-1 duration-500 delay-150 ease-out fill-mode-both"
+      />
     </div>
   );
 }

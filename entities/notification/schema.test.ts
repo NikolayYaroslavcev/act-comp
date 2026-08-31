@@ -15,6 +15,20 @@ describe("dueNotificationSchema", () => {
       }).success,
     ).toBe(true);
   });
+
+  it("accepts a work_day_hours_changed notification payload with a null threshold", () => {
+    expect(
+      dueNotificationSchema.safeParse({
+        key: "work_day_hours_changed:act-1:null",
+        kind: "work_day_hours_changed",
+        entityType: "user",
+        entityId: "act-1",
+        threshold: null,
+        title: "Рабочий день изменён",
+        body: "8 ч -> 6 ч",
+      }).success,
+    ).toBe(true);
+  });
 });
 
 describe("ackNotificationsInputSchema", () => {

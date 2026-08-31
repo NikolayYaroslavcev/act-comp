@@ -63,13 +63,13 @@ describe("POST /api/lists/[id]/share", () => {
     expect(response.status).toBe(404);
   });
 
-  it("returns 403 when the caller does not own the list", async () => {
+  it("returns 404 when the caller does not own the list", async () => {
     const stranger = sessionFor("u3", "61");
     const list = createList("u1", { title: "Owned", template: "work", deadline: null });
 
     const response = await callShare(list.id, shareRequest(list.id, stranger.id, { userId: "u2", access: "read" }));
 
-    expect(response.status).toBe(403);
+    expect(response.status).toBe(404);
   });
 
   it("returns 403 for an edit-access collaborator (only the owner manages sharing)", async () => {
@@ -112,7 +112,7 @@ describe("POST /api/lists/[id]/share", () => {
     expect(response.status).toBe(400);
   });
 
-  it("returns 404 when the target user does not exist", async () => {
+  it("returns 400 when the target user does not exist, without revealing that they are missing", async () => {
     const session = sessionFor("u1", "66");
     const list = createList("u1", { title: "Owned", template: "work", deadline: null });
 
@@ -121,7 +121,9 @@ describe("POST /api/lists/[id]/share", () => {
       shareRequest(list.id, session.id, { userId: "does-not-exist", access: "read" }),
     );
 
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(400);
+    const json = await response.json();
+    expect(json.error.message).toBe("Unable to share this list with the specified user");
   });
 
   it("returns 400 when the owner tries to share the list with themselves", async () => {

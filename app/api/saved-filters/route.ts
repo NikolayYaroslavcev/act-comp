@@ -4,20 +4,35 @@ import { jsonError, jsonOk } from "@/shared/lib/api-response";
 import { requireAuth } from "@/features/auth/require-auth";
 import { savedFilterScopeSchema } from "@/entities/saved-filter/schema";
 import { taskFilterCriteriaSchema } from "@/entities/saved-filter/query-schema";
+import { listFilterCriteriaSchema } from "@/entities/saved-filter/list-query-schema";
+import type { FilterCriteriaByScope } from "@/entities/saved-filter/repository";
 import { idSchema } from "@/entities/common/schema";
 import { listSavedFiltersForUser } from "@/features/saved-filter/list-saved-filters";
 import { applyFilterForUser } from "@/features/saved-filter/apply-filter";
 import { saveFilterForUser } from "@/features/saved-filter/save-filter";
 import { touchSavedFilterForUser } from "@/features/saved-filter/touch-saved-filter";
 
-const applyRequestSchema = z.object({ action: z.literal("apply"), criteria: taskFilterCriteriaSchema });
+const applyRequestSchema = z.object({
+  action: z.literal("apply"),
+  scope: savedFilterScopeSchema.optional().default("tasks"),
+  criteria: z.record(z.string(), z.unknown()),
+});
 const saveRequestSchema = z.object({
   action: z.literal("save"),
-  criteria: taskFilterCriteriaSchema,
+  scope: savedFilterScopeSchema.optional().default("tasks"),
+  criteria: z.record(z.string(), z.unknown()),
   label: z.string().min(1).max(100).nullable().optional().default(null),
 });
 const touchRequestSchema = z.object({ action: z.literal("touch"), id: idSchema });
 const postBodySchema = z.discriminatedUnion("action", [applyRequestSchema, saveRequestSchema, touchRequestSchema]);
+
+// criteria is validated loosely by postBodySchema and then re-checked here
+// against the schema matching `scope` — a single zod union across both
+// scopes' criteria shapes would risk zod matching the wrong branch instead
+// of enforcing that the criteria actually match the declared scope.
+function parseCriteriaForScope(scope: "tasks" | "lists", criteria: unknown) {
+  return scope === "lists" ? listFilterCriteriaSchema.safeParse(criteria) : taskFilterCriteriaSchema.safeParse(criteria);
+}
 
 export async function GET(request: NextRequest) {
   const auth = requireAuth(request);
@@ -29,9 +44,6 @@ export async function GET(request: NextRequest) {
   const scopeResult = savedFilterScopeSchema.safeParse(scopeParam);
   if (!scopeResult.success) {
     return jsonError(400, "Invalid scope");
-  }
-  if (scopeResult.data === "lists") {
-    return jsonError(400, "Scope 'lists' is not supported yet");
   }
 
   return jsonOk(listSavedFiltersForUser(auth.user.id, scopeResult.data));
@@ -61,10 +73,16 @@ export async function POST(request: NextRequest) {
     return jsonOk(result.filter);
   }
 
+  const criteriaResult = parseCriteriaForScope(parsed.data.scope, parsed.data.criteria);
+  if (!criteriaResult.success) {
+    return jsonError(400, "Validation failed", criteriaResult.error.issues);
+  }
+  const criteria = criteriaResult.data as FilterCriteriaByScope;
+
   const filter =
     parsed.data.action === "apply"
-      ? applyFilterForUser(auth.user.id, parsed.data.criteria)
-      : saveFilterForUser(auth.user.id, parsed.data.criteria, parsed.data.label);
+      ? applyFilterForUser(auth.user.id, parsed.data.scope, criteria)
+      : saveFilterForUser(auth.user.id, parsed.data.scope, criteria, parsed.data.label);
 
   return jsonOk(filter, 201);
 }

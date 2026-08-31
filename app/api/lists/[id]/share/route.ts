@@ -31,7 +31,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     case "forbidden":
       return jsonError(403, "Only the owner can manage sharing for this list");
     case "user_not_found":
-      return jsonError(404, "User not found");
+      return jsonError(400, "Unable to share this list with the specified user");
     case "self_share":
       return jsonError(400, "Cannot share a list with yourself");
     case "ok":

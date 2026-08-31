@@ -20,19 +20,19 @@ describe("proxy", () => {
       rememberMe: false,
     });
 
-    const response = proxy(requestFor("/", session.id));
+    const response = proxy(requestFor("/dashboard", session.id));
 
     expect(getRedirectUrl(response)).toBeNull();
   });
 
   it("redirects to /login when no session cookie is present", () => {
-    const response = proxy(requestFor("/"));
+    const response = proxy(requestFor("/dashboard"));
 
     const location = getRedirectUrl(response);
     expect(location).not.toBeNull();
     const url = new URL(location!);
     expect(url.pathname).toBe("/login");
-    expect(url.searchParams.get("redirect")).toBe("/");
+    expect(url.searchParams.get("redirect")).toBe("/dashboard");
   });
 
   it("redirects to /login for an unknown session id", () => {
@@ -60,6 +60,10 @@ describe("proxy", () => {
   describe("matcher", () => {
     it("does not run on /login", () => {
       expect(unstable_doesMiddlewareMatch({ config, url: "/login" })).toBe(false);
+    });
+
+    it("does not run on / (the public welcome screen handles its own anonymous/authenticated split)", () => {
+      expect(unstable_doesMiddlewareMatch({ config, url: "/" })).toBe(false);
     });
 
     it("does not run on /api/auth/login", () => {
@@ -91,8 +95,7 @@ describe("proxy", () => {
       expect(unstable_doesMiddlewareMatch({ config, url: "/next.svg" })).toBe(false);
     });
 
-    it("runs on application routes", () => {
-      expect(unstable_doesMiddlewareMatch({ config, url: "/" })).toBe(true);
+    it("runs on protected application routes", () => {
       expect(unstable_doesMiddlewareMatch({ config, url: "/dashboard" })).toBe(true);
       expect(unstable_doesMiddlewareMatch({ config, url: "/settings" })).toBe(true);
     });

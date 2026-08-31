@@ -1,8 +1,11 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TaskList } from "./task-list";
+import { EMPTY_TASK_FILTER_CRITERIA } from "@/entities/saved-filter/query-schema";
 import type { Task } from "@/entities/task/schema";
+import { chooseSelectOption } from "@/shared/test/ui";
+import { renderWithStore as render } from "@/shared/store/test-utils";
 
 function jsonResponse(status: number, body: unknown) {
   return new Response(JSON.stringify(body), {
@@ -16,9 +19,18 @@ function jsonResponse(status: number, body: unknown) {
 // routing that unrelated background request to its own fresh response (
 // rather than the single canned Response these tests stub for the task
 // mutation under test) keeps it from starving the mutation's own read.
+//
+// TaskComments and the task PATCH mutation call fetchFn(request) with a
+// single Request object rather than fetch(url, init) — normalize both
+// shapes to a URL string before routing.
+function urlOf(arg: unknown): string {
+  return arg instanceof Request ? arg.url : String(arg);
+}
+
 function stubFetchForTaskAction(handler: (url: string, init?: RequestInit) => Promise<Response> | Response) {
-  const fetchMock = vi.fn((url: string, init?: RequestInit) => {
-    if (url.endsWith("/comments")) {
+  const fetchMock = vi.fn((input: string | Request, init?: RequestInit) => {
+    const url = urlOf(input);
+    if (url.endsWith("/comments") || url.endsWith("/activity")) {
       return Promise.resolve(jsonResponse(200, { data: [] }));
     }
     if (url.startsWith("/api/saved-filters")) {
@@ -82,6 +94,40 @@ describe("TaskList", () => {
     expect(screen.getAllByTestId("task-row")).toHaveLength(2);
     expect(screen.getByText("First")).toBeInTheDocument();
     expect(screen.getByText("Second")).toBeInTheDocument();
+    expect(screen.queryByTestId("task-list-pagination")).not.toBeInTheDocument();
+  });
+
+  it("paginates long lists and moves to the next page", async () => {
+    const user = userEvent.setup();
+    const tasks = Array.from({ length: 11 }, (_, index) =>
+      makeTask({ id: `t${index + 1}`, code: `TEST-${index + 1}`, title: `Task ${index + 1}` }),
+    );
+    render(<TaskList tasks={tasks} now={NOW} />);
+
+    expect(screen.getAllByTestId("task-row")).toHaveLength(10);
+    expect(screen.queryByText("Task 11", { exact: true })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Следующая страница" }));
+
+    expect(screen.getAllByTestId("task-row")).toHaveLength(1);
+    expect(screen.getByText("Task 11", { exact: true })).toBeInTheDocument();
+  });
+
+  it("returns to the first page when filters are applied", async () => {
+    const user = userEvent.setup();
+    const tasks = Array.from({ length: 11 }, (_, index) =>
+      makeTask({ id: `t${index + 1}`, code: `TEST-${index + 1}`, title: `Task ${index + 1}` }),
+    );
+    render(<TaskList tasks={tasks} now={NOW} />);
+
+    await user.click(screen.getByRole("button", { name: "Следующая страница" }));
+    await user.type(screen.getByTestId("task-filters-search"), "Task");
+    await user.click(screen.getByTestId("task-filters-apply"));
+
+    const rows = screen.getAllByTestId("task-row");
+    expect(rows).toHaveLength(10);
+    expect(rows[0]).toHaveTextContent("TEST-1");
+    expect(screen.queryByText("TEST-11")).not.toBeInTheDocument();
   });
 
   it("shows an empty state when there are no tasks", () => {
@@ -145,7 +191,7 @@ describe("TaskList", () => {
     await user.click(screen.getByTestId("task-row"));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
 
-    await user.click(screen.getByTestId("task-detail-close"));
+    await user.click(screen.getByTestId("dialog-close"));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -225,6 +271,25 @@ describe("TaskList edit permissions", () => {
     expect(screen.getByTestId("task-detail-edit")).toBeInTheDocument();
   });
 
+  it("lets an editor inline-edit the task title from the list detail dialog", async () => {
+    const user = userEvent.setup();
+    render(<TaskList tasks={[makeTask({ id: "t1", title: "Из списка" })]} now={NOW} canEdit />);
+
+    await user.click(screen.getByTestId("task-row"));
+
+    expect(screen.getByRole("textbox", { name: "Название" })).toHaveValue("Из списка");
+  });
+
+  it("does not show inline editors in the list detail dialog for shared-read", async () => {
+    const user = userEvent.setup();
+    render(<TaskList tasks={[makeTask({ id: "t1", title: "Из списка" })]} now={NOW} />);
+
+    await user.click(screen.getByTestId("task-row"));
+
+    expect(screen.queryByRole("textbox", { name: "Название" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toHaveTextContent("Из списка");
+  });
+
   it("offers other tasks in the same list as dependency options in edit mode", async () => {
     const user = userEvent.setup();
     render(
@@ -256,7 +321,7 @@ describe("TaskList reflecting a saved edit", () => {
     await user.click(screen.getByTestId("task-edit-save"));
 
     await waitFor(() => expect(screen.queryByTestId("task-edit-form")).not.toBeInTheDocument());
-    await user.click(screen.getByTestId("task-detail-close"));
+    await user.click(screen.getByTestId("dialog-close"));
 
     expect(screen.getByText("Новое имя")).toBeInTheDocument();
     expect(screen.queryByText("Старое имя")).not.toBeInTheDocument();
@@ -379,6 +444,84 @@ describe("TaskList search and filters", () => {
     expect(screen.getByTestId("task-filters-search")).toHaveValue("");
   });
 
+  it("applies a saved filter from the saved list and updates the visible rows", async () => {
+    const savedFilter = {
+      id: "s1",
+      userId: "u1",
+      scope: "tasks" as const,
+      usedAt: "2026-08-01T00:00:00.000Z",
+      query: { ...EMPTY_TASK_FILTER_CRITERIA, search: "deploy", saved: true, label: "Deploys" },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | Request, init?: RequestInit) => {
+        const url = urlOf(input);
+        if (url.startsWith("/api/saved-filters") && init?.method === "POST") {
+          return jsonResponse(200, { data: savedFilter });
+        }
+        if (url.startsWith("/api/saved-filters")) {
+          return jsonResponse(200, { data: { recent: [], saved: [savedFilter] } });
+        }
+        return jsonResponse(404, {});
+      }),
+    );
+    const user = userEvent.setup();
+    render(
+      <TaskList
+        tasks={[
+          makeTask({ id: "t1", code: "TEST-1", title: "Deploy service" }),
+          makeTask({ id: "t2", code: "TEST-2", title: "Write docs" }),
+        ]}
+        now={NOW}
+      />,
+    );
+
+    await user.click(await screen.findByTestId("saved-filter-apply-s1"));
+
+    expect(screen.getAllByTestId("task-row")).toHaveLength(1);
+    expect(screen.queryByText("Write docs")).not.toBeInTheDocument();
+    expect(screen.getByTestId("task-filters-search")).toHaveValue("deploy");
+    expect(screen.getByTestId("saved-filters-saved")).toBeInTheDocument();
+  });
+
+  it("shows the no-results state when a saved status filter matches nothing", async () => {
+    const savedFilter = {
+      id: "s-new",
+      userId: "u1",
+      scope: "tasks" as const,
+      usedAt: "2026-08-01T00:00:00.000Z",
+      query: { ...EMPTY_TASK_FILTER_CRITERIA, status: ["new"], saved: true, label: "Новые" },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | Request, init?: RequestInit) => {
+        const url = urlOf(input);
+        if (url.startsWith("/api/saved-filters") && init?.method === "POST") {
+          return jsonResponse(200, { data: savedFilter });
+        }
+        if (url.startsWith("/api/saved-filters")) {
+          return jsonResponse(200, { data: { recent: [], saved: [savedFilter] } });
+        }
+        return jsonResponse(404, {});
+      }),
+    );
+    const user = userEvent.setup();
+    render(
+      <TaskList
+        tasks={[
+          makeTask({ id: "t10", title: "Собрать команду", status: "done" }),
+          makeTask({ id: "t11", title: "Подготовить бюджет", status: "in_progress" }),
+        ]}
+        now={NOW}
+      />,
+    );
+
+    await user.click(await screen.findByTestId("saved-filter-apply-s-new"));
+
+    expect(screen.getByTestId("task-list-no-results")).toBeInTheDocument();
+    expect(screen.getByTestId("task-filters-status-new")).toBeChecked();
+  });
+
   it("still opens the correct task detail after filtering", async () => {
     const user = userEvent.setup();
     render(
@@ -411,7 +554,7 @@ describe("TaskList Kanban view", () => {
 
     await user.click(screen.getByTestId("task-view-kanban"));
 
-    expect(screen.getByTestId("kanban-board")).toBeInTheDocument();
+    expect(await screen.findByTestId("kanban-board")).toBeInTheDocument();
     expect(screen.queryByTestId("task-list")).not.toBeInTheDocument();
     expect(screen.getByText("First")).toBeInTheDocument();
   });
@@ -432,7 +575,7 @@ describe("TaskList Kanban view", () => {
     await user.type(screen.getByTestId("task-filters-search"), "deploy");
     await user.click(screen.getByTestId("task-filters-apply"));
 
-    expect(screen.getByTestId("kanban-card")).toHaveTextContent("Deploy service");
+    expect(await screen.findByTestId("kanban-card")).toHaveTextContent("Deploy service");
     expect(screen.queryByText("Write docs")).not.toBeInTheDocument();
   });
 
@@ -441,7 +584,7 @@ describe("TaskList Kanban view", () => {
     render(<TaskList tasks={[makeTask({ id: "t1", code: "TEST-1", title: "First" })]} now={NOW} />);
 
     await user.click(screen.getByTestId("task-view-kanban"));
-    await user.click(screen.getByTestId("kanban-card-open"));
+    await user.click(await screen.findByTestId("kanban-card-open"));
 
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveTextContent("TEST-1");
@@ -455,7 +598,8 @@ describe("TaskList Kanban view", () => {
     render(<TaskList tasks={[makeTask({ id: "t1", code: "TEST-1", title: "Task", status: "new" })]} now={NOW} canEdit />);
 
     await user.click(screen.getByTestId("task-view-kanban"));
-    await user.selectOptions(screen.getByTestId("kanban-status-select"), "in_progress");
+    expect(await screen.findByTestId("kanban-status-select")).toBeInTheDocument();
+    await chooseSelectOption(user, screen.getByTestId("kanban-status-select"), "В работе");
     await waitFor(() => expect(screen.getByTestId("task-status")).toHaveTextContent("В работе"));
 
     await user.click(screen.getByTestId("task-view-list"));

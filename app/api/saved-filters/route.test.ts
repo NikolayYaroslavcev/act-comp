@@ -5,6 +5,7 @@ import { SESSION_COOKIE_NAME } from "@/features/auth/session-cookie";
 import { createSession } from "@/entities/session/repository";
 import { getDb } from "@/shared/lib/db";
 import { EMPTY_TASK_FILTER_CRITERIA } from "@/entities/saved-filter/query-schema";
+import { EMPTY_LIST_FILTER_CRITERIA } from "@/entities/saved-filter/list-query-schema";
 
 function savedFiltersRequest(sessionId?: string, query = "") {
   return new NextRequest(`http://localhost/api/saved-filters${query}`, {
@@ -45,10 +46,30 @@ describe("GET /api/saved-filters", () => {
     expect(response.status).toBe(400);
   });
 
-  it("returns 400 for the not-yet-implemented lists scope", async () => {
+  it("supports the lists scope, returning only that scope's saved filters", async () => {
     const session = sessionFor("u1", "91");
+    getDb().savedFilters = {
+      taskFilter: {
+        id: "taskFilter",
+        userId: "u1",
+        scope: "tasks",
+        query: { ...EMPTY_TASK_FILTER_CRITERIA, saved: false, label: null },
+        usedAt: "2026-08-01T00:00:00.000Z",
+      },
+      listFilter: {
+        id: "listFilter",
+        userId: "u1",
+        scope: "lists",
+        query: { ...EMPTY_LIST_FILTER_CRITERIA, saved: false, label: null },
+        usedAt: "2026-08-01T00:00:00.000Z",
+      },
+    };
+
     const response = await GET(savedFiltersRequest(session.id, "?scope=lists"));
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(200);
+    const json = await response.json();
+    const ids = [...json.data.recent, ...json.data.saved].map((f: { id: string }) => f.id);
+    expect(ids).toEqual(["listFilter"]);
   });
 
   it("returns only the caller's own filters", async () => {
@@ -112,6 +133,58 @@ describe("POST /api/saved-filters", () => {
     );
     const json = await response.json();
     expect(json.data.query).toMatchObject({ saved: true, label: "Mine" });
+  });
+
+  it("applies a list filter under the lists scope when scope is provided", async () => {
+    const session = sessionFor("u1", "95a");
+    const response = await POST(
+      postSavedFiltersRequest(session.id, {
+        action: "apply",
+        scope: "lists",
+        criteria: { ...EMPTY_LIST_FILTER_CRITERIA, search: "sprint" },
+      }),
+    );
+    expect(response.status).toBe(201);
+    const json = await response.json();
+    expect(json.data.scope).toBe("lists");
+    expect(json.data.query).toMatchObject({ search: "sprint", saved: false });
+  });
+
+  it("saves a list filter with a label under the lists scope", async () => {
+    const session = sessionFor("u1", "95b");
+    const response = await POST(
+      postSavedFiltersRequest(session.id, {
+        action: "save",
+        scope: "lists",
+        criteria: { ...EMPTY_LIST_FILTER_CRITERIA, template: ["work"] },
+        label: "My lists",
+      }),
+    );
+    expect(response.status).toBe(201);
+    const json = await response.json();
+    expect(json.data.scope).toBe("lists");
+    expect(json.data.query).toMatchObject({ template: ["work"], saved: true, label: "My lists" });
+  });
+
+  it("rejects list-scoped criteria that do not match the list filter shape", async () => {
+    const session = sessionFor("u1", "95c");
+    const response = await POST(
+      postSavedFiltersRequest(session.id, {
+        action: "apply",
+        scope: "lists",
+        criteria: EMPTY_TASK_FILTER_CRITERIA,
+      }),
+    );
+    expect(response.status).toBe(400);
+  });
+
+  it("defaults to the tasks scope when scope is omitted, preserving prior behaviour", async () => {
+    const session = sessionFor("u1", "95d");
+    const response = await POST(
+      postSavedFiltersRequest(session.id, { action: "apply", criteria: EMPTY_TASK_FILTER_CRITERIA }),
+    );
+    const json = await response.json();
+    expect(json.data.scope).toBe("tasks");
   });
 
   describe("touch action", () => {

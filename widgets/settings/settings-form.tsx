@@ -9,6 +9,7 @@ import { applyDocumentTheme } from "@/features/settings/apply-theme";
 import { useSettings } from "@/features/settings/use-settings";
 import { Button } from "@/shared/ui/button";
 import { Card, CardContent } from "@/shared/ui/card";
+import { Separator } from "@/shared/ui/separator";
 import { NotificationsSection } from "./notifications-section";
 import {
   settingsFormSchema,
@@ -64,10 +65,13 @@ export function SettingsForm({ initialSettings }: SettingsFormProps) {
   return (
     <Card className="w-full max-w-2xl" data-testid="settings-form">
       <CardContent>
-        <form noValidate onSubmit={handleSubmit(onValid)} className="flex flex-col gap-8">
-          <ThemeSection register={register} errors={errors} disabled={isPending} />
+        <form noValidate onSubmit={handleSubmit(onValid)} className="flex flex-col gap-6">
+          <ThemeSection control={control} errors={errors} disabled={isPending} />
+          <Separator />
           <NotificationsSection control={control} disabled={isPending} />
+          <Separator />
           <WorkDaySection register={register} errors={errors} disabled={isPending} />
+          <Separator />
           <TaskDefaultsSection register={register} errors={errors} disabled={isPending} />
 
           {error && (

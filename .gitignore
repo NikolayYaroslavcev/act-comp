@@ -44,4 +44,5 @@ yarn-error.log*
 next-env.d.ts
 
 # internal task docs (spec/plan, not part of the shipped project)
-/docs
+/docs/*
+!/docs/PROJECT-STATUS.md

@@ -8,6 +8,7 @@ import {
   type UpsertFilterInput,
 } from "./repository";
 import { EMPTY_TASK_FILTER_CRITERIA, parseSavedFilterQuery } from "./query-schema";
+import { EMPTY_LIST_FILTER_CRITERIA, parseSavedListFilterQuery } from "./list-query-schema";
 
 function baseInput(overrides: Partial<UpsertFilterInput> = {}): UpsertFilterInput {
   return {
@@ -106,6 +107,44 @@ describe("upsertAppliedFilter", () => {
       "new",
       "old",
     ]);
+  });
+});
+
+describe("upsertAppliedFilter for the lists scope", () => {
+  it("creates and lists a recent list filter using the list criteria schema", () => {
+    const created = upsertAppliedFilter(
+      baseInput({ scope: "lists", criteria: { ...EMPTY_LIST_FILTER_CRITERIA, search: "sprint" } }),
+    );
+
+    expect(created.scope).toBe("lists");
+    expect(parseSavedListFilterQuery(created)).toMatchObject({ search: "sprint", saved: false });
+    expect(listSavedFilters("u1", "lists")).toHaveLength(1);
+  });
+
+  it("keeps tasks-scope and lists-scope filters for the same user completely separate", () => {
+    upsertAppliedFilter(baseInput({ scope: "tasks" }));
+    upsertAppliedFilter(baseInput({ scope: "lists", criteria: EMPTY_LIST_FILTER_CRITERIA }));
+
+    expect(listSavedFilters("u1", "tasks")).toHaveLength(1);
+    expect(listSavedFilters("u1", "lists")).toHaveLength(1);
+  });
+
+  it("does not treat a reordered template array as a different list filter", () => {
+    upsertAppliedFilter(baseInput({ scope: "lists", criteria: { ...EMPTY_LIST_FILTER_CRITERIA, template: ["work", "personal"] } }));
+    upsertAppliedFilter(baseInput({ scope: "lists", criteria: { ...EMPTY_LIST_FILTER_CRITERIA, template: ["personal", "work"] } }));
+
+    expect(listSavedFilters("u1", "lists")).toHaveLength(1);
+  });
+
+  it("caps recent list filters at 5 per user, independently of the tasks-scope cap", () => {
+    for (let i = 0; i < 6; i += 1) {
+      upsertAppliedFilter(
+        baseInput({ scope: "lists", criteria: { ...EMPTY_LIST_FILTER_CRITERIA, search: `q${i}` } }),
+        new Date(2026, 7, i + 1),
+      );
+    }
+
+    expect(listSavedFilters("u1", "lists")).toHaveLength(5);
   });
 });
 

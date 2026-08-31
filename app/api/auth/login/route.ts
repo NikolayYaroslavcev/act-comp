@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     return jsonError(401, "Invalid email or password");
   }
 
-  const response = jsonOk(result, 200);
+  const response = jsonOk({ user: result.user }, 200);
   response.cookies.set(SESSION_COOKIE_NAME, result.session.id, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",

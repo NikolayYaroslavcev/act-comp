@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useSavedFilters } from "./use-saved-filters";
+import { EMPTY_LIST_FILTER_CRITERIA, type ListFilterCriteria } from "@/entities/saved-filter/list-query-schema";
 import { EMPTY_TASK_FILTER_CRITERIA } from "@/entities/saved-filter/query-schema";
 
 function jsonResponse(status: number, body: unknown) {
@@ -115,6 +116,54 @@ describe("useSavedFilters", () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
+  it("does not hide the loaded lists behind a loading state while a touch refresh is in flight", async () => {
+    let resolveRefresh!: (value: Response) => void;
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(200, { data: { recent: [{ id: "r1" }], saved: [{ id: "s1" }] } }))
+      .mockResolvedValueOnce(jsonResponse(200, { data: { id: "r1" } }))
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => {
+        resolveRefresh = resolve;
+      }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useSavedFilters());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    let pending!: Promise<unknown>;
+    act(() => {
+      pending = result.current.touchFilter("r1");
+    });
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    expect(result.current.isLoading).toBe(false);
+    expect(result.current.saved).toEqual([{ id: "s1" }]);
+
+    await act(async () => {
+      resolveRefresh(jsonResponse(200, { data: { recent: [{ id: "r1" }], saved: [{ id: "s1" }] } }));
+      await pending;
+    });
+
+    expect(result.current.isLoading).toBe(false);
+  });
+
+  it("surfaces a not-found error when touching a missing filter", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(200, { data: { recent: [], saved: [] } }))
+      .mockResolvedValueOnce(jsonResponse(404, { error: { message: "Saved filter not found" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useSavedFilters());
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await act(async () => {
+      await result.current.touchFilter("gone");
+    });
+
+    expect(result.current.error).toBe("Фильтр не найден или уже удалён");
+  });
+
   it("saves a filter with a label", async () => {
     const fetchMock = vi
       .fn()
@@ -178,5 +227,40 @@ describe("useSavedFilters", () => {
 
     expect(deleted).toBe(false);
     expect(result.current.error).toBe("Фильтр не найден или уже удалён");
+  });
+});
+
+describe("useSavedFilters with scope='lists'", () => {
+  it("fetches the lists scope instead of tasks", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { data: { recent: [], saved: [] } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderHook(() => useSavedFilters<ListFilterCriteria>("lists"));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith("/api/saved-filters?scope=lists"));
+  });
+
+  it("includes scope in the apply/save request bodies", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(200, { data: { recent: [], saved: [] } }))
+      .mockResolvedValueOnce(jsonResponse(201, { data: { id: "lf1" } }))
+      .mockResolvedValueOnce(jsonResponse(200, { data: { recent: [{ id: "lf1" }], saved: [] } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { result } = renderHook(() => useSavedFilters<ListFilterCriteria>("lists"));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    await act(async () => {
+      await result.current.applyFilter(EMPTY_LIST_FILTER_CRITERIA);
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/saved-filters",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ action: "apply", scope: "lists", criteria: EMPTY_LIST_FILTER_CRITERIA }),
+      }),
+    );
   });
 });

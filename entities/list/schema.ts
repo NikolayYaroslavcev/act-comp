@@ -5,7 +5,7 @@ export const listTemplateSchema = z.enum(["work", "personal", "project"]);
 
 export const sharedAccessSchema = z.enum(["read", "edit"]);
 
-export const listShareSchema = z.object({
+const listShareSchema = z.object({
   userId: idSchema,
   access: sharedAccessSchema,
 });

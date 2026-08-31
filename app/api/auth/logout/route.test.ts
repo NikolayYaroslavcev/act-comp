@@ -14,8 +14,7 @@ async function loginAndGetSessionId() {
       body: JSON.stringify({ email: "admin@example.com", password: "Admin123!" }),
     }),
   );
-  const json = await response.json();
-  return json.data.session.id as string;
+  return response.cookies.get(SESSION_COOKIE_NAME)?.value as string;
 }
 
 function logoutRequest(sessionId?: string) {

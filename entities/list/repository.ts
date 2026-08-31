@@ -58,6 +58,10 @@ export function updateList(id: string, userId: string, patch: UpdateListInput): 
     return { status: "not_found" };
   }
 
+  if (!canViewList(existing, userId)) {
+    return { status: "not_found" };
+  }
+
   if (!canEditList(existing, userId)) {
     return { status: "forbidden" };
   }
@@ -97,7 +101,7 @@ export function duplicateList(id: string, userId: string, input: DuplicateListIn
   }
 
   if (!canViewList(existing, userId)) {
-    return { status: "forbidden" };
+    return { status: "not_found" };
   }
 
   if (existing.deletedAt !== null) {
@@ -134,6 +138,10 @@ export function shareList(id: string, ownerId: string, input: ShareListInput): S
   const db = getDb();
   const existing = db.lists[id];
   if (!existing) {
+    return { status: "not_found" };
+  }
+
+  if (!canViewList(existing, ownerId)) {
     return { status: "not_found" };
   }
 
@@ -177,6 +185,10 @@ export function deleteList(id: string, userId: string): DeleteListOutcome {
     return { status: "not_found" };
   }
 
+  if (!canViewList(existing, userId)) {
+    return { status: "not_found" };
+  }
+
   if (!canDeleteList(existing, userId)) {
     return { status: "forbidden" };
   }
@@ -207,6 +219,10 @@ export function restoreList(id: string, userId: string, now: Date): RestoreListO
   const db = getDb();
   const existing = db.lists[id];
   if (!existing) {
+    return { status: "not_found" };
+  }
+
+  if (!canViewList(existing, userId)) {
     return { status: "not_found" };
   }
 

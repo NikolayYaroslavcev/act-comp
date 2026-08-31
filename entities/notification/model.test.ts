@@ -204,6 +204,58 @@ describe("evaluateNotifications", () => {
     expect(result.map((item) => item.key)).toEqual([notificationKey("time_threshold", "t-open", 75)]);
   });
 
+  it("uses the same elapsed as the timer, including a running session", () => {
+    const result = evaluateNotifications({
+      lists: [makeList({ deadline: null })],
+      tasks: [makeTask({ timeSpentMin: 70, timerStartedAt: "2026-08-29T11:40:00.000Z" })],
+      settings: DEFAULT_SETTINGS.notifications,
+      now,
+      seenKeys: new Set(),
+      workDayHours: 8,
+    });
+    expect(result.map((item) => item.threshold)).toEqual([75]);
+  });
+
+  it("applies workDayHours so a capped session does not cross a wall-clock-only 90%", () => {
+    const result = evaluateNotifications({
+      lists: [makeList({ deadline: null })],
+      tasks: [
+        makeTask({
+          estimatedMin: 100,
+          timeSpentMin: 0,
+          timerStartedAt: "2026-08-29T10:00:00.000Z",
+        }),
+      ],
+      settings: DEFAULT_SETTINGS.notifications,
+      now: new Date("2026-08-29T11:30:00.000Z"),
+      seenKeys: new Set(),
+      workDayHours: 1,
+    });
+    expect(result).toEqual([]);
+  });
+
+  it("emits 75, 90 and 100 together when elapsed reaches the estimate", () => {
+    const result = evaluateNotifications({
+      lists: [makeList({ deadline: null })],
+      tasks: [makeTask({ timeSpentMin: 100 })],
+      settings: DEFAULT_SETTINGS.notifications,
+      now,
+      seenKeys: new Set(),
+    });
+    expect(result.map((item) => item.threshold)).toEqual([75, 90, 100]);
+  });
+
+  it("does not notify when estimatedMin is 0", () => {
+    const result = evaluateNotifications({
+      lists: [makeList({ deadline: null })],
+      tasks: [makeTask({ estimatedMin: 0, timeSpentMin: 50 })],
+      settings: DEFAULT_SETTINGS.notifications,
+      now,
+      seenKeys: new Set(),
+    });
+    expect(result).toEqual([]);
+  });
+
   it("does not notify for a completed task", () => {
     const result = evaluateNotifications({
       lists: [makeList({ deadline: null })],
@@ -299,6 +351,78 @@ describe("evaluateNotifications", () => {
       settings: DEFAULT_SETTINGS.notifications,
       now,
       seenKeys: new Set([notificationKey("time_threshold", "t-open", 75)]),
+    });
+    expect(result).toEqual([]);
+  });
+});
+
+describe("evaluateNotifications workDayHours change", () => {
+  const now = new Date("2026-08-29T11:45:00.000Z");
+
+  it("emits a work_day_hours_changed notification for a pending change", () => {
+    const result = evaluateNotifications({
+      lists: [],
+      tasks: [],
+      settings: DEFAULT_SETTINGS.notifications,
+      now,
+      seenKeys: new Set(),
+      workDayHoursChanges: [{ id: "act-1", previousHours: 8, newHours: 6 }],
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      kind: "work_day_hours_changed",
+      key: notificationKey("work_day_hours_changed", "act-1", null),
+    });
+  });
+
+  it("does not re-emit an already-acked workDayHours change", () => {
+    const key = notificationKey("work_day_hours_changed", "act-1", null);
+    const result = evaluateNotifications({
+      lists: [],
+      tasks: [],
+      settings: DEFAULT_SETTINGS.notifications,
+      now,
+      seenKeys: new Set([key]),
+      workDayHoursChanges: [{ id: "act-1", previousHours: 8, newHours: 6 }],
+    });
+    expect(result).toEqual([]);
+  });
+
+  it("emits a distinct notification for each subsequent change", () => {
+    const result = evaluateNotifications({
+      lists: [],
+      tasks: [],
+      settings: DEFAULT_SETTINGS.notifications,
+      now,
+      seenKeys: new Set([notificationKey("work_day_hours_changed", "act-1", null)]),
+      workDayHoursChanges: [
+        { id: "act-1", previousHours: 8, newHours: 6 },
+        { id: "act-2", previousHours: 6, newHours: 7 },
+      ],
+    });
+    expect(result.map((item) => item.key)).toEqual([notificationKey("work_day_hours_changed", "act-2", null)]);
+  });
+
+  it("does not emit when workHoursRecalculation is disabled", () => {
+    const result = evaluateNotifications({
+      lists: [],
+      tasks: [],
+      settings: { ...DEFAULT_SETTINGS.notifications, workHoursRecalculation: false },
+      now,
+      seenKeys: new Set(),
+      workDayHoursChanges: [{ id: "act-1", previousHours: 8, newHours: 6 }],
+    });
+    expect(result).toEqual([]);
+  });
+
+  it("does not emit anything when there are no changes", () => {
+    const result = evaluateNotifications({
+      lists: [],
+      tasks: [],
+      settings: DEFAULT_SETTINGS.notifications,
+      now,
+      seenKeys: new Set(),
+      workDayHoursChanges: [],
     });
     expect(result).toEqual([]);
   });

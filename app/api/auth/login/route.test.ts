@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 import { POST } from "@/app/api/auth/login/route";
 import { findSessionById } from "@/entities/session/repository";
+import { SESSION_COOKIE_NAME } from "@/features/auth/session-cookie";
+import { getCurrentSession } from "@/features/auth/current-session";
 
 function loginRequest(body: unknown, userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0") {
   return new NextRequest("http://localhost/api/auth/login", {
@@ -17,11 +19,14 @@ describe("POST /api/auth/login", () => {
       loginRequest({ email: "admin@example.com", password: "Admin123!" }),
     );
     const json = await response.json();
+    const sessionId = response.cookies.get(SESSION_COOKIE_NAME)?.value;
 
     expect(response.status).toBe(200);
     expect(json.data.user.email).toBe("admin@example.com");
     expect(json.data.user.passwordHash).toBeUndefined();
-    expect(json.data.session.userId).toBe(json.data.user.id);
+    expect(json.data.session).toBeUndefined();
+    expect(sessionId).toBeTruthy();
+    expect(findSessionById(sessionId!)?.userId).toBe(json.data.user.id);
   });
 
   it("returns 401 for a wrong password", async () => {
@@ -52,27 +57,27 @@ describe("POST /api/auth/login", () => {
     const response = await POST(
       loginRequest({ email: "admin@example.com", password: "Admin123!" }),
     );
-    const json = await response.json();
+    const sessionId = response.cookies.get(SESSION_COOKIE_NAME)?.value;
 
-    expect(findSessionById(json.data.session.id)).toBeDefined();
+    expect(findSessionById(sessionId!)).toBeDefined();
   });
 
   it("stores the requested rememberMe value on the session", async () => {
     const response = await POST(
       loginRequest({ email: "admin@example.com", password: "Admin123!", rememberMe: true }),
     );
-    const json = await response.json();
+    const sessionId = response.cookies.get(SESSION_COOKIE_NAME)?.value;
 
-    expect(json.data.session.rememberMe).toBe(true);
+    expect(findSessionById(sessionId!)?.rememberMe).toBe(true);
   });
 
   it("creates a new session with revokedAt set to null", async () => {
     const response = await POST(
       loginRequest({ email: "admin@example.com", password: "Admin123!" }),
     );
-    const json = await response.json();
+    const sessionId = response.cookies.get(SESSION_COOKIE_NAME)?.value;
 
-    expect(json.data.session.revokedAt).toBeNull();
+    expect(findSessionById(sessionId!)?.revokedAt).toBeNull();
   });
 
   it("determines device from the User-Agent header", async () => {
@@ -82,8 +87,17 @@ describe("POST /api/auth/login", () => {
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Version/17.0 Safari/605.1.15",
       ),
     );
-    const json = await response.json();
+    const sessionId = response.cookies.get(SESSION_COOKIE_NAME)?.value;
 
-    expect(json.data.session.device).toBe("Safari on macOS");
+    expect(findSessionById(sessionId!)?.device).toBe("Safari on macOS");
+  });
+
+  it("lets the httpOnly cookie authenticate a subsequent request", async () => {
+    const response = await POST(
+      loginRequest({ email: "admin@example.com", password: "Admin123!" }),
+    );
+    const sessionId = response.cookies.get(SESSION_COOKIE_NAME)?.value;
+
+    expect(getCurrentSession(sessionId)).not.toBeNull();
   });
 });

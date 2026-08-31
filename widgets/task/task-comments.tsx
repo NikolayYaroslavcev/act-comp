@@ -2,19 +2,21 @@
 
 import { useState } from "react";
 import { useTaskComments } from "@/features/comment/use-task-comments";
+import { usePagedItems } from "@/shared/lib/use-paged-items";
 import { Button } from "@/shared/ui/button";
 import { Label } from "@/shared/ui/label";
+import { PaginationBar } from "@/shared/ui/pagination";
 import { Textarea } from "@/shared/ui/textarea";
+import { formatDateTime } from "@/shared/lib/format-date";
 
 interface TaskCommentsProps {
   taskId: string;
   canComment?: boolean;
 }
 
-const dateTimeFormatter = new Intl.DateTimeFormat("ru", { dateStyle: "medium", timeStyle: "short" });
-
 export function TaskComments({ taskId, canComment = false }: TaskCommentsProps) {
   const { comments, isLoading, loadError, addComment, isSubmitting, submitError } = useTaskComments(taskId);
+  const { page, setPage, totalPages, pageItems } = usePagedItems(comments);
   const [text, setText] = useState("");
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -55,27 +57,35 @@ export function TaskComments({ taskId, canComment = false }: TaskCommentsProps) 
       )}
 
       {!isLoading && !loadError && comments.length > 0 && (
-        <ul className="flex max-h-56 flex-col gap-2 overflow-y-auto" data-testid="task-comments-list">
-          {comments.map((comment) => (
-            <li
-              key={comment.id}
-              data-testid="task-comment"
-              className="min-w-0 rounded-lg border border-border px-3 py-2"
-            >
-              <div className="flex min-w-0 items-center justify-between gap-2 text-xs text-muted-foreground">
-                <span data-testid="task-comment-author" className="min-w-0 truncate">
-                  {comment.authorEmail}
-                </span>
-                <span data-testid="task-comment-time" className="shrink-0">
-                  {dateTimeFormatter.format(new Date(comment.createdAt))}
-                </span>
-              </div>
-              <p className="mt-1 text-sm break-words whitespace-pre-wrap" data-testid="task-comment-text">
-                {comment.text}
-              </p>
-            </li>
-          ))}
-        </ul>
+        <div className="flex flex-col gap-2">
+          <ul className="flex flex-col gap-2" data-testid="task-comments-list">
+            {pageItems.map((comment) => (
+              <li
+                key={comment.id}
+                data-testid="task-comment"
+                className="min-w-0 rounded-lg border border-border px-3 py-2"
+              >
+                <div className="flex min-w-0 items-center justify-between gap-2 text-xs text-muted-foreground">
+                  <span data-testid="task-comment-author" className="min-w-0 truncate">
+                    {comment.authorEmail}
+                  </span>
+                  <span data-testid="task-comment-time" className="shrink-0">
+                    {formatDateTime(comment.createdAt)}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm break-words whitespace-pre-wrap" data-testid="task-comment-text">
+                  {comment.text}
+                </p>
+              </li>
+            ))}
+          </ul>
+          <PaginationBar
+            page={page}
+            totalPages={totalPages}
+            onPageChange={setPage}
+            data-testid="task-comments-pagination"
+          />
+        </div>
       )}
 
       {canComment && (

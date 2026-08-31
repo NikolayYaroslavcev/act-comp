@@ -49,7 +49,7 @@ export function LoginForm({ redirectTo }: LoginFormProps) {
   );
 
   return (
-    <div className="w-full max-w-sm rounded-xl border border-border bg-card p-6 text-card-foreground shadow-sm sm:p-8">
+    <div className="motion-reduce:animate-none animate-in fade-in zoom-in-95 slide-in-from-bottom-4 w-full max-w-sm rounded-xl border border-border bg-card p-6 text-card-foreground shadow-sm duration-500 ease-out sm:p-8">
       <div className="mb-6 space-y-1.5 text-center">
         <h1 className="text-xl font-semibold tracking-tight">Вход в Task Manager</h1>
         <p className="text-sm text-muted-foreground">

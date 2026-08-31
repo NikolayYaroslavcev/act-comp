@@ -79,6 +79,20 @@ describe("applyTaskTimer", () => {
     }
   });
 
+  it("persists working elapsed using the acting user's workDayHours cap", () => {
+    const list = createList("u2", { title: "List", template: "work", deadline: null });
+    const task = makeTaskIn(list.id);
+    applyTaskTimer(task.id, "u2", "start", new Date("2026-08-29T10:00:00.000Z"));
+
+    const result = applyTaskTimer(task.id, "u2", "pause", new Date("2026-08-29T17:00:00.000Z"));
+
+    expect(result.status).toBe("ok");
+    if (result.status === "ok") {
+      expect(result.task.timeSpentMin).toBe(6 * 60);
+    }
+    expect(findTaskById(task.id)?.timeSpentMin).toBe(6 * 60);
+  });
+
   it("does not start a second parallel timer", () => {
     const list = createList("u1", { title: "List", template: "work", deadline: null });
     const task = makeTaskIn(list.id);

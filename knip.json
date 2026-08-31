@@ -1,0 +1,12 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignore": [
+    "shared/ui/badge.tsx",
+    "shared/ui/calendar.tsx",
+    "shared/ui/dialog.tsx",
+    "shared/ui/dropdown-menu.tsx",
+    "shared/ui/pagination.tsx",
+    "shared/ui/popover.tsx",
+    "shared/ui/select.tsx"
+  ]
+}

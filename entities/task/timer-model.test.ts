@@ -6,7 +6,9 @@ import {
   elapsedMinutes,
   estimateProgressPercent,
   formatElapsedClock,
+  getTimerCountdownTier,
   getTimerState,
+  remainingMs,
 } from "@/entities/task/model";
 import type { Task } from "@/entities/task/schema";
 
@@ -81,6 +83,18 @@ describe("elapsedMs / elapsedMinutes", () => {
   it("does not go negative if startedAt is in the future", () => {
     const task = makeTask({ timerStartedAt: T0_PLUS_5M.toISOString() });
     expect(elapsedMs(task, new Date(T0))).toBe(0);
+  });
+
+  it("caps a running session at workDayHours on the same UTC day", () => {
+    const task = makeTask({ timerStartedAt: T0 });
+    const tenHoursLater = new Date("2026-08-29T20:00:00.000Z");
+    expect(elapsedMinutes(task, tenHoursLater, 8)).toBe(8 * 60);
+    expect(elapsedMs(task, tenHoursLater, 8)).toBe(8 * 60 * 60_000);
+  });
+
+  it("uses wall-clock elapsed when the running session is under workDayHours", () => {
+    const task = makeTask({ timeSpentMin: 10, timerStartedAt: T0 });
+    expect(elapsedMinutes(task, T0_PLUS_5M, 8)).toBe(15);
   });
 });
 
@@ -162,6 +176,15 @@ describe("applyTimerAction pause", () => {
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
       expect(result.task.timeSpentMin).toBe(0);
+    }
+  });
+
+  it("commits working elapsed capped by workDayHours, not wall-clock", () => {
+    const running = makeTask({ timerStartedAt: T0 });
+    const result = applyTimerAction(running, "pause", new Date("2026-08-29T20:00:00.000Z"), "u1", 8);
+    expect(result.status).toBe("ok");
+    if (result.status === "ok") {
+      expect(result.task.timeSpentMin).toBe(8 * 60);
     }
   });
 });
@@ -249,6 +272,22 @@ describe("applyTimerAction sessions and restrictions", () => {
     }
   });
 
+  it("adds only the second session's working minutes after resume", () => {
+    const paused = makeTask({ timeSpentMin: 5, timerPausedAt: T0 });
+    const resumed = applyTimerAction(paused, "resume", new Date("2026-08-29T12:00:00.000Z"), "u1", 8);
+    expect(resumed.status).toBe("ok");
+    if (resumed.status !== "ok") {
+      return;
+    }
+    const stopped = applyTimerAction(resumed.task, "stop", new Date("2026-08-29T12:03:00.000Z"), "u1", 8);
+    expect(stopped.status).toBe("ok");
+    if (stopped.status === "ok") {
+      expect(stopped.task.timeSpentMin).toBe(8);
+      expect(stopped.task.timerStartedAt).toBeNull();
+      expect(stopped.task.timerPausedAt).toBeNull();
+    }
+  });
+
   it("rejects timer actions on a completed task", () => {
     const done = makeTask({ status: "done" });
     expect(applyTimerAction(done, "start", new Date(T0), "u1").status).toBe("completed");
@@ -267,6 +306,65 @@ describe("applyTimerAction sessions and restrictions", () => {
         expect.objectContaining({ field: "timerStartedAt", old: null, new: T0, at: T0, byUserId: "u1" }),
       ]);
     }
+  });
+});
+
+describe("remainingMs", () => {
+  it("is null when the task has no estimate", () => {
+    const task = makeTask({ estimatedMin: 0 });
+    expect(remainingMs(task, new Date(T0))).toBeNull();
+  });
+
+  it("is the full estimate before any time is spent", () => {
+    const task = makeTask({ estimatedMin: 60, timeSpentMin: 0 });
+    expect(remainingMs(task, new Date(T0))).toBe(60 * 60_000);
+  });
+
+  it("decreases as committed time is spent", () => {
+    const task = makeTask({ estimatedMin: 60, timeSpentMin: 20 });
+    expect(remainingMs(task, new Date(T0))).toBe(40 * 60_000);
+  });
+
+  it("decreases live while the timer is running", () => {
+    const task = makeTask({ estimatedMin: 60, timeSpentMin: 0, timerStartedAt: T0 });
+    expect(remainingMs(task, T0_PLUS_5M)).toBe(55 * 60_000);
+  });
+
+  it("is exactly 0 when spent time equals the estimate", () => {
+    const task = makeTask({ estimatedMin: 60, timeSpentMin: 60 });
+    expect(remainingMs(task, new Date(T0))).toBe(0);
+  });
+
+  it("goes negative once the estimate is exceeded (callers clamp for display)", () => {
+    const task = makeTask({ estimatedMin: 60, timeSpentMin: 75 });
+    expect(remainingMs(task, new Date(T0))).toBe(-15 * 60_000);
+  });
+
+  it("does not double-count time while paused (uses committed timeSpentMin only)", () => {
+    const task = makeTask({ estimatedMin: 60, timeSpentMin: 20, timerPausedAt: T0 });
+    expect(remainingMs(task, T0_PLUS_5M)).toBe(remainingMs(task, new Date(T0)));
+  });
+});
+
+describe("getTimerCountdownTier", () => {
+  it("is null when there is no estimate to count down from", () => {
+    expect(getTimerCountdownTier(makeTask({ estimatedMin: 0 }), new Date(T0))).toBeNull();
+  });
+
+  it("is normal under the 75% threshold", () => {
+    const task = makeTask({ estimatedMin: 100, timeSpentMin: 74 });
+    expect(getTimerCountdownTier(task, new Date(T0))).toBe("normal");
+  });
+
+  it("is warning between the 75% and 100% thresholds", () => {
+    const task = makeTask({ estimatedMin: 100, timeSpentMin: 75 });
+    expect(getTimerCountdownTier(task, new Date(T0))).toBe("warning");
+    expect(getTimerCountdownTier(makeTask({ estimatedMin: 100, timeSpentMin: 99 }), new Date(T0))).toBe("warning");
+  });
+
+  it("is urgent at and beyond the 100% threshold", () => {
+    expect(getTimerCountdownTier(makeTask({ estimatedMin: 100, timeSpentMin: 100 }), new Date(T0))).toBe("urgent");
+    expect(getTimerCountdownTier(makeTask({ estimatedMin: 100, timeSpentMin: 130 }), new Date(T0))).toBe("urgent");
   });
 });
 

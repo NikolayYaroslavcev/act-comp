@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { chooseSelectOption } from "@/shared/test/ui";
 import { SettingsForm } from "./settings-form";
 import { DEFAULT_SETTINGS, type Settings } from "@/entities/user/schema";
 
@@ -33,7 +34,7 @@ describe("SettingsForm", () => {
   it("renders the current settings values", () => {
     render(<SettingsForm initialSettings={initial} />);
 
-    expect(screen.getByRole("combobox", { name: "Тема" })).toHaveValue("light");
+    expect(screen.getByRole("combobox", { name: "Тема" })).toHaveTextContent("Светлая");
     expect(screen.getByRole("spinbutton", { name: "Длительность рабочего дня (часы)" })).toHaveValue(6);
     expect(screen.getByRole("checkbox", { name: "Напоминания о дедлайнах" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Оповещения о порогах времени" })).not.toBeChecked();
@@ -50,7 +51,7 @@ describe("SettingsForm", () => {
     );
     render(<SettingsForm initialSettings={initial} />);
 
-    await user.selectOptions(screen.getByRole("combobox", { name: "Тема" }), "dark");
+    await chooseSelectOption(user, screen.getByRole("combobox", { name: "Тема" }), "Тёмная");
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
     expect(fetch).toHaveBeenCalledWith(
@@ -90,7 +91,7 @@ describe("SettingsForm", () => {
     );
     render(<SettingsForm initialSettings={initial} />);
 
-    await user.selectOptions(screen.getByRole("combobox", { name: "Тема" }), "dark");
+    await chooseSelectOption(user, screen.getByRole("combobox", { name: "Тема" }), "Тёмная");
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
     expect(screen.getByRole("button", { name: /сохранение/i })).toBeDisabled();
@@ -105,11 +106,11 @@ describe("SettingsForm", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(400, { error: { message: "x" } })));
     render(<SettingsForm initialSettings={initial} />);
 
-    await user.selectOptions(screen.getByRole("combobox", { name: "Тема" }), "dark");
+    await chooseSelectOption(user, screen.getByRole("combobox", { name: "Тема" }), "Тёмная");
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("Проверьте правильность заполнения формы");
-    expect(screen.getByRole("combobox", { name: "Тема" })).toHaveValue("dark");
+    expect(screen.getByRole("combobox", { name: "Тема" })).toHaveTextContent("Тёмная");
   });
 
   it("applies the dark class after a successful theme save", async () => {
@@ -120,10 +121,35 @@ describe("SettingsForm", () => {
     );
     render(<SettingsForm initialSettings={initial} />);
 
-    await user.selectOptions(screen.getByRole("combobox", { name: "Тема" }), "dark");
+    await chooseSelectOption(user, screen.getByRole("combobox", { name: "Тема" }), "Тёмная");
     await user.click(screen.getByRole("button", { name: "Сохранить" }));
 
     await screen.findByRole("status");
     expect(document.documentElement.classList.contains("dark")).toBe(true);
+  });
+});
+
+describe("SettingsForm work day hours save", () => {
+  it("saves the changed work day hours field and shows the generic save confirmation", async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse(200, { data: { ...initial, workDayHours: 4 } })),
+    );
+    render(<SettingsForm initialSettings={initial} />);
+
+    const input = screen.getByRole("spinbutton", { name: "Длительность рабочего дня (часы)" });
+    await user.clear(input);
+    await user.type(input, "4");
+    await user.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/settings",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ workDayHours: 4 }),
+      }),
+    );
+    expect(await screen.findByRole("status")).toHaveTextContent("Настройки сохранены");
   });
 });

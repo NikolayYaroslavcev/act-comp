@@ -12,9 +12,14 @@ interface WorkDaySectionProps {
 export function WorkDaySection({ register, errors, disabled }: WorkDaySectionProps) {
   return (
     <section className="flex flex-col gap-3" aria-labelledby="settings-workday-heading">
-      <h2 id="settings-workday-heading" className="text-sm font-semibold">
-        Рабочий день
-      </h2>
+      <div className="space-y-1">
+        <h2 id="settings-workday-heading" className="text-sm font-semibold">
+          Рабочий день
+        </h2>
+        <p className="text-xs text-muted-foreground">
+          Используется для прогноза завершения задач и пересчёта затраченного времени.
+        </p>
+      </div>
       <div className="space-y-1.5">
         <Label htmlFor="settings-work-day-hours">Длительность рабочего дня (часы)</Label>
         <Input

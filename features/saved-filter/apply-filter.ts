@@ -1,7 +1,6 @@
-import { upsertAppliedFilter } from "@/entities/saved-filter/repository";
-import type { TaskFilterCriteria } from "@/entities/saved-filter/query-schema";
-import type { SavedFilter } from "@/entities/saved-filter/schema";
+import { upsertAppliedFilter, type FilterCriteriaByScope } from "@/entities/saved-filter/repository";
+import type { SavedFilter, SavedFilterScope } from "@/entities/saved-filter/schema";
 
-export function applyFilterForUser(userId: string, criteria: TaskFilterCriteria): SavedFilter {
-  return upsertAppliedFilter({ userId, scope: "tasks", criteria, saved: false, label: null });
+export function applyFilterForUser(userId: string, scope: SavedFilterScope, criteria: FilterCriteriaByScope): SavedFilter {
+  return upsertAppliedFilter({ userId, scope, criteria, saved: false, label: null });
 }

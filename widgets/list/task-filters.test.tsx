@@ -1,5 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { format } from "date-fns";
+import { ru } from "date-fns/locale";
 import { describe, expect, it, vi } from "vitest";
 import { fromDatetimeLocalValue, TaskFilters, toDatetimeLocalValue } from "./task-filters";
 import { EMPTY_TASK_FILTER_CRITERIA } from "@/entities/saved-filter/query-schema";
@@ -62,11 +64,13 @@ describe("TaskFilters", () => {
     expect(onDraftChange).toHaveBeenCalledWith({ ...EMPTY_TASK_FILTER_CRITERIA, search: "x" });
   });
 
-  it("lists distinct categories derived from the visible tasks", () => {
+  it("lists distinct categories derived from the visible tasks", async () => {
+    const user = userEvent.setup();
     render(
       <TaskFilters tasks={TASKS} draft={EMPTY_TASK_FILTER_CRITERIA} onDraftChange={vi.fn()} onApply={vi.fn()} onClear={vi.fn()} />,
     );
-    expect(screen.getByRole("option", { name: "Backend" })).toBeInTheDocument();
+    await user.click(screen.getByTestId("task-filters-category"));
+    expect(await screen.findByRole("option", { name: "Backend" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Frontend" })).toBeInTheDocument();
   });
 
@@ -168,14 +172,35 @@ describe("TaskFilters", () => {
       expect(secondIso).toBe(firstIso);
     });
 
-    it("renders the deadlineFrom input with the round-tripped value after setting it via the draft", () => {
+    it("renders the deadlineFrom input with the round-tripped value after setting it via the draft", async () => {
+      const user = userEvent.setup();
       const onDraftChange = vi.fn();
       const { rerender } = render(
         <TaskFilters tasks={TASKS} draft={EMPTY_TASK_FILTER_CRITERIA} onDraftChange={onDraftChange} onApply={vi.fn()} onClear={vi.fn()} />,
       );
 
-      const input = screen.getByTestId("task-filters-deadline-from");
-      fireEvent.change(input, { target: { value: "2026-09-15T14:30" } });
+      await user.click(screen.getByTestId("task-filters-deadline-from"));
+      const day = new Date();
+      day.setDate(15);
+      day.setHours(0, 0, 0, 0);
+      const dayButton = document.querySelector(`[data-day="${day.toLocaleDateString("ru")}"]`);
+      expect(dayButton).toBeTruthy();
+      await user.click(dayButton as HTMLElement);
+
+      const afterDaySelect = onDraftChange.mock.calls[onDraftChange.mock.calls.length - 1][0];
+      expect(afterDaySelect.deadlineFrom).not.toBeNull();
+
+      rerender(
+        <TaskFilters
+          tasks={TASKS}
+          draft={{ ...EMPTY_TASK_FILTER_CRITERIA, deadlineFrom: afterDaySelect.deadlineFrom }}
+          onDraftChange={onDraftChange}
+          onApply={vi.fn()}
+          onClear={vi.fn()}
+        />,
+      );
+
+      fireEvent.change(screen.getByLabelText("Время"), { target: { value: "14:30" } });
 
       const lastCall = onDraftChange.mock.calls[onDraftChange.mock.calls.length - 1][0];
       expect(lastCall.deadlineFrom).not.toBeNull();
@@ -190,7 +215,11 @@ describe("TaskFilters", () => {
         />,
       );
 
-      expect(screen.getByTestId("task-filters-deadline-from")).toHaveValue("2026-09-15T14:30");
+      const expected = new Date(day);
+      expected.setHours(14, 30, 0, 0);
+      expect(screen.getByTestId("task-filters-deadline-from")).toHaveTextContent(
+        format(expected, "d MMM yyyy, HH:mm", { locale: ru }),
+      );
     });
   });
 });

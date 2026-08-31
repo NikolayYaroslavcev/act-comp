@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createTaskForUser } from "@/features/task/create-task";
 import { createList, findListById } from "@/entities/list/repository";
-import { findTaskById } from "@/entities/task/repository";
+import { createTask, findTaskById } from "@/entities/task/repository";
 
 function baseInput(listId: string) {
   return {
@@ -81,5 +81,57 @@ describe("createTaskForUser", () => {
     });
 
     expect(result.status).toBe("forbidden");
+  });
+
+  it("rejects a parentId that references a task in a different list", () => {
+    const listA = createList("u-owner-8", { title: "A", template: "work", deadline: null });
+    const listB = createList("u-owner-8b", { title: "B", template: "work", deadline: null });
+    const foreignParent = createTask({ ...baseInput(listB.id), title: "Foreign parent" });
+
+    const result = createTaskForUser("u-owner-8", { ...baseInput(listA.id), parentId: foreignParent.id });
+
+    expect(result.status).toBe("invalid_parent");
+    expect(findTaskById(foreignParent.id)!.subtaskIds).toEqual([]);
+  });
+
+  it("rejects an unknown parentId", () => {
+    const list = createList("u-owner-9", { title: "Owned", template: "work", deadline: null });
+
+    const result = createTaskForUser("u-owner-9", { ...baseInput(list.id), parentId: "does-not-exist" });
+
+    expect(result.status).toBe("invalid_parent");
+  });
+
+  it("rejects a parentId that references a soft-deleted task", () => {
+    const list = createList("u-owner-10", { title: "Owned", template: "work", deadline: null });
+    const parent = createTask({ ...baseInput(list.id), title: "Deleted parent" });
+    findTaskById(parent.id)!.deletedAt = "2026-08-01T00:00:00.000Z";
+
+    const result = createTaskForUser("u-owner-10", { ...baseInput(list.id), parentId: parent.id });
+
+    expect(result.status).toBe("invalid_parent");
+  });
+
+  it("accepts a parentId that references an existing task in the same list", () => {
+    const list = createList("u-owner-11", { title: "Owned", template: "work", deadline: null });
+    const parent = createTask({ ...baseInput(list.id), title: "Parent" });
+
+    const result = createTaskForUser("u-owner-11", { ...baseInput(list.id), parentId: parent.id, title: "Child" });
+
+    expect(result.status).toBe("ok");
+    if (result.status === "ok") {
+      expect(result.task.parentId).toBe(parent.id);
+      expect(result.task.listId).toBe(list.id);
+    }
+  });
+
+  it("accepts a same-list parentId when the caller has shared edit access", () => {
+    const list = createList("u-owner-12", { title: "Shared", template: "work", deadline: null });
+    findListById(list.id)!.sharedWith.push({ userId: "u-editor-12", access: "edit" });
+    const parent = createTask({ ...baseInput(list.id), title: "Parent" });
+
+    const result = createTaskForUser("u-editor-12", { ...baseInput(list.id), parentId: parent.id });
+
+    expect(result.status).toBe("ok");
   });
 });

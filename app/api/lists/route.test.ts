@@ -3,7 +3,7 @@ import { NextRequest } from "next/server";
 import { GET, POST } from "@/app/api/lists/route";
 import { SESSION_COOKIE_NAME } from "@/features/auth/session-cookie";
 import { createSession, revokeSession } from "@/entities/session/repository";
-import { findListById } from "@/entities/list/repository";
+import { createList, findListById } from "@/entities/list/repository";
 
 function listsRequest(sessionId?: string) {
   return new NextRequest("http://localhost/api/lists", {
@@ -75,6 +75,103 @@ describe("GET /api/lists", () => {
     expect(response.status).toBe(200);
     const json = await response.json();
     expect(Array.isArray(json.data)).toBe(true);
+  });
+
+  it("includes a list owned by the current user", async () => {
+    const session = createSession({
+      userId: "u1",
+      ip: "192.0.2.60 (demo)",
+      device: "Chrome on Windows",
+      rememberMe: false,
+    });
+    const list = createList("u1", { title: "Owned by u1", template: "work", deadline: null });
+
+    const response = await GET(listsRequest(session.id));
+
+    const json = await response.json();
+    expect(json.data.map((entry: { id: string }) => entry.id)).toContain(list.id);
+  });
+
+  it("includes a list shared with read access", async () => {
+    const session = createSession({
+      userId: "u2",
+      ip: "192.0.2.61 (demo)",
+      device: "Chrome on Windows",
+      rememberMe: false,
+    });
+    const list = createList("u1", { title: "Shared read", template: "work", deadline: null });
+    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "read" });
+
+    const response = await GET(listsRequest(session.id));
+
+    const json = await response.json();
+    expect(json.data.map((entry: { id: string }) => entry.id)).toContain(list.id);
+  });
+
+  it("includes a list shared with edit access", async () => {
+    const session = createSession({
+      userId: "u2",
+      ip: "192.0.2.62 (demo)",
+      device: "Chrome on Windows",
+      rememberMe: false,
+    });
+    const list = createList("u1", { title: "Shared edit", template: "work", deadline: null });
+    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "edit" });
+
+    const response = await GET(listsRequest(session.id));
+
+    const json = await response.json();
+    expect(json.data.map((entry: { id: string }) => entry.id)).toContain(list.id);
+  });
+
+  it("excludes a private list owned by another user", async () => {
+    const session = createSession({
+      userId: "u2",
+      ip: "192.0.2.63 (demo)",
+      device: "Chrome on Windows",
+      rememberMe: false,
+    });
+    const list = createList("u1", { title: "Private to u1", template: "work", deadline: null });
+
+    const response = await GET(listsRequest(session.id));
+
+    const json = await response.json();
+    expect(json.data.map((entry: { id: string }) => entry.id)).not.toContain(list.id);
+  });
+
+  it("excludes a soft-deleted list even for its owner", async () => {
+    const session = createSession({
+      userId: "u1",
+      ip: "192.0.2.64 (demo)",
+      device: "Chrome on Windows",
+      rememberMe: false,
+    });
+    const list = createList("u1", { title: "Deleted", template: "work", deadline: null });
+    findListById(list.id)!.deletedAt = "2026-08-01T00:00:00.000Z";
+
+    const response = await GET(listsRequest(session.id));
+
+    const json = await response.json();
+    expect(json.data.map((entry: { id: string }) => entry.id)).not.toContain(list.id);
+  });
+
+  it("ignores a spoofed userId in the query string and scopes results to the session's user", async () => {
+    const session = createSession({
+      userId: "u2",
+      ip: "192.0.2.65 (demo)",
+      device: "Chrome on Windows",
+      rememberMe: false,
+    });
+    const otherList = createList("u1", { title: "Belongs to u1", template: "work", deadline: null });
+
+    const spoofedRequest = new NextRequest("http://localhost/api/lists?userId=u1", {
+      headers: { cookie: `${SESSION_COOKIE_NAME}=${session.id}` },
+    });
+    const response = await GET(spoofedRequest);
+
+    expect(response.status).toBe(200);
+    const json = await response.json();
+    expect(json.data.map((entry: { id: string }) => entry.id)).not.toContain(otherList.id);
   });
 });
 

@@ -4,6 +4,7 @@ import { POST as login } from "@/app/api/auth/login/route";
 import { POST as revoke } from "@/app/api/auth/sessions/[id]/revoke/route";
 import { SESSION_COOKIE_NAME } from "@/features/auth/session-cookie";
 import { createSession, findSessionById } from "@/entities/session/repository";
+import { deriveSessionDisplayId } from "@/entities/session/dto";
 import { getCurrentSession } from "@/features/auth/current-session";
 
 async function loginAndGetSession() {
@@ -15,7 +16,8 @@ async function loginAndGetSession() {
     }),
   );
   const json = await response.json();
-  return { sessionId: json.data.session.id as string, userId: json.data.user.id as string };
+  const sessionId = response.cookies.get(SESSION_COOKIE_NAME)?.value as string;
+  return { sessionId, userId: json.data.user.id as string };
 }
 
 function revokeRequest(targetId: string, cookieSessionId?: string) {
@@ -38,7 +40,7 @@ describe("POST /api/auth/sessions/[id]/revoke", () => {
       rememberMe: false,
     });
 
-    const { request, context } = revokeRequest(other.id, sessionId);
+    const { request, context } = revokeRequest(deriveSessionDisplayId(other.id), sessionId);
     const response = await revoke(request, context);
     const json = await response.json();
 
@@ -56,7 +58,7 @@ describe("POST /api/auth/sessions/[id]/revoke", () => {
       rememberMe: false,
     });
 
-    const { request, context } = revokeRequest(other.id, sessionId);
+    const { request, context } = revokeRequest(deriveSessionDisplayId(other.id), sessionId);
     await revoke(request, context);
 
     expect(getCurrentSession(other.id)).toBeNull();
@@ -71,7 +73,7 @@ describe("POST /api/auth/sessions/[id]/revoke", () => {
       rememberMe: false,
     });
 
-    const { request, context } = revokeRequest(other.id, sessionId);
+    const { request, context } = revokeRequest(deriveSessionDisplayId(other.id), sessionId);
     const response = await revoke(request, context);
 
     expect(response.cookies.get(SESSION_COOKIE_NAME)).toBeUndefined();
@@ -81,7 +83,7 @@ describe("POST /api/auth/sessions/[id]/revoke", () => {
   it("revokes the current session when targeted", async () => {
     const { sessionId } = await loginAndGetSession();
 
-    const { request, context } = revokeRequest(sessionId, sessionId);
+    const { request, context } = revokeRequest(deriveSessionDisplayId(sessionId), sessionId);
     const response = await revoke(request, context);
     const json = await response.json();
 
@@ -93,7 +95,7 @@ describe("POST /api/auth/sessions/[id]/revoke", () => {
   it("clears the session_id cookie when revoking the current session", async () => {
     const { sessionId } = await loginAndGetSession();
 
-    const { request, context } = revokeRequest(sessionId, sessionId);
+    const { request, context } = revokeRequest(deriveSessionDisplayId(sessionId), sessionId);
     const response = await revoke(request, context);
 
     const cookie = response.cookies.get(SESSION_COOKIE_NAME);
@@ -103,7 +105,7 @@ describe("POST /api/auth/sessions/[id]/revoke", () => {
   it("makes getCurrentSession return null after revoking the current session", async () => {
     const { sessionId } = await loginAndGetSession();
 
-    const { request, context } = revokeRequest(sessionId, sessionId);
+    const { request, context } = revokeRequest(deriveSessionDisplayId(sessionId), sessionId);
     await revoke(request, context);
 
     expect(getCurrentSession(sessionId)).toBeNull();
@@ -125,10 +127,10 @@ describe("POST /api/auth/sessions/[id]/revoke", () => {
 
   it("returns 401 when the current session is revoked", async () => {
     const { sessionId } = await loginAndGetSession();
-    const { request: firstRequest, context: firstContext } = revokeRequest(sessionId, sessionId);
+    const { request: firstRequest, context: firstContext } = revokeRequest(deriveSessionDisplayId(sessionId), sessionId);
     await revoke(firstRequest, firstContext);
 
-    const { request, context } = revokeRequest(sessionId, sessionId);
+    const { request, context } = revokeRequest(deriveSessionDisplayId(sessionId), sessionId);
     const response = await revoke(request, context);
 
     expect(response.status).toBe(401);
@@ -143,7 +145,7 @@ describe("POST /api/auth/sessions/[id]/revoke", () => {
       rememberMe: false,
     });
 
-    const { request, context } = revokeRequest(otherUserSession.id, sessionId);
+    const { request, context } = revokeRequest(deriveSessionDisplayId(otherUserSession.id), sessionId);
     const response = await revoke(request, context);
     const json = await response.json();
 
@@ -163,6 +165,22 @@ describe("POST /api/auth/sessions/[id]/revoke", () => {
     expect(json.data.success).toBe(true);
   });
 
+  it("does not revoke a session when given its real id instead of its display id", async () => {
+    const { sessionId, userId } = await loginAndGetSession();
+    const other = createSession({
+      userId,
+      ip: "192.0.2.75 (demo)",
+      device: "Firefox on Linux",
+      rememberMe: false,
+    });
+
+    const { request, context } = revokeRequest(other.id, sessionId);
+    const response = await revoke(request, context);
+
+    expect(response.status).toBe(200);
+    expect(findSessionById(other.id)?.revokedAt).toBeNull();
+  });
+
   it("does not return session, user, or other extra data", async () => {
     const { sessionId, userId } = await loginAndGetSession();
     const other = createSession({
@@ -172,7 +190,7 @@ describe("POST /api/auth/sessions/[id]/revoke", () => {
       rememberMe: false,
     });
 
-    const { request, context } = revokeRequest(other.id, sessionId);
+    const { request, context } = revokeRequest(deriveSessionDisplayId(other.id), sessionId);
     const response = await revoke(request, context);
     const json = await response.json();
 

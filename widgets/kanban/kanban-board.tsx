@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useMemo } from "react";
 import {
   DndContext,
   KeyboardSensor,
@@ -52,25 +53,40 @@ export function KanbanBoard({
     useSensor(KeyboardSensor),
   );
 
-  const displayedTasks = applyKanbanStatusOverrides(tasks, statusOverrides);
-  const lookupWithOverrides = applyKanbanStatusOverrides(lookupTasks, statusOverrides);
-  const columns = groupTasksByKanbanColumn(displayedTasks);
-  const lookupById = new Map(lookupWithOverrides.map((task) => [task.id, task]));
-  const statusById = new Map<string, Task["status"]>();
-  for (const task of lookupWithOverrides) {
-    statusById.set(task.id, task.status);
-  }
-  for (const task of displayedTasks) {
-    statusById.set(task.id, task.status);
-  }
-
-  function handleDragEnd(event: DragEndEvent) {
-    const overId = event.over ? String(event.over.id) : null;
-    const nextStatus = resolveKanbanDropStatus(String(event.active.id), overId, statusById);
-    if (nextStatus) {
-      moveTask(String(event.active.id), nextStatus);
+  const displayedTasks = useMemo(
+    () => applyKanbanStatusOverrides(tasks, statusOverrides),
+    [statusOverrides, tasks],
+  );
+  const lookupWithOverrides = useMemo(
+    () => applyKanbanStatusOverrides(lookupTasks, statusOverrides),
+    [lookupTasks, statusOverrides],
+  );
+  const columns = useMemo(() => groupTasksByKanbanColumn(displayedTasks), [displayedTasks]);
+  const lookupById = useMemo(
+    () => new Map(lookupWithOverrides.map((task) => [task.id, task])),
+    [lookupWithOverrides],
+  );
+  const statusById = useMemo(() => {
+    const next = new Map<string, Task["status"]>();
+    for (const task of lookupWithOverrides) {
+      next.set(task.id, task.status);
     }
-  }
+    for (const task of displayedTasks) {
+      next.set(task.id, task.status);
+    }
+    return next;
+  }, [displayedTasks, lookupWithOverrides]);
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const overId = event.over ? String(event.over.id) : null;
+      const nextStatus = resolveKanbanDropStatus(String(event.active.id), overId, statusById);
+      if (nextStatus) {
+        moveTask(String(event.active.id), nextStatus);
+      }
+    },
+    [moveTask, statusById],
+  );
 
   return (
     <DndContext
@@ -94,28 +110,55 @@ export function KanbanBoard({
         },
       }}
     >
-      <div
-        data-testid="kanban-board"
-        className="flex min-w-0 w-full max-w-full gap-3 overflow-x-auto pb-2 md:grid md:grid-cols-3 md:overflow-x-visible"
-      >
-        {KANBAN_STATUSES.map((status) => (
-          <KanbanColumn key={status} status={status} title={COLUMN_TITLES[status]}>
-            {columns[status].map((task) => (
-              <KanbanCard
-                key={task.id}
-                task={task}
-                blocked={isTaskBlocked(task, lookupById)}
-                now={now}
-                searchQuery={searchQuery}
-                canEdit={canEdit}
-                isPending={pendingTaskIds.has(task.id)}
-                error={errorsByTaskId[task.id]}
-                onOpen={(opened) => onOpen?.(opened)}
-                onStatusChange={(nextStatus) => moveTask(task.id, nextStatus)}
-              />
-            ))}
-          </KanbanColumn>
-        ))}
+      {pendingTaskIds.size > 0 && (
+        <p
+          data-testid="kanban-board-loading"
+          aria-live="polite"
+          className="mb-2 text-xs text-muted-foreground"
+        >
+          Сохранение изменений…
+        </p>
+      )}
+      {Object.keys(errorsByTaskId).length > 0 && (
+        <p
+          data-testid="kanban-board-error"
+          aria-live="polite"
+          className="mb-2 text-xs text-destructive"
+        >
+          Не удалось обновить {Object.keys(errorsByTaskId).length}{" "}
+          {Object.keys(errorsByTaskId).length === 1 ? "задачу" : "задачи"}. Подробности — на карточке.
+        </p>
+      )}
+      <div className="w-full min-w-0 max-w-full overflow-hidden rounded-xl border border-border bg-muted/20 p-3">
+        <div
+          data-testid="kanban-board"
+          className="flex min-w-0 w-full max-w-full gap-3 overflow-x-auto pb-1 md:grid md:grid-cols-3 md:overflow-x-visible"
+        >
+          {KANBAN_STATUSES.map((status) => (
+            <KanbanColumn
+              key={status}
+              status={status}
+              title={COLUMN_TITLES[status]}
+              count={columns[status].length}
+              isEmpty={columns[status].length === 0}
+            >
+              {columns[status].map((task) => (
+                <KanbanCard
+                  key={task.id}
+                  task={task}
+                  blocked={isTaskBlocked(task, lookupById)}
+                  now={now}
+                  searchQuery={searchQuery}
+                  canEdit={canEdit}
+                  isPending={pendingTaskIds.has(task.id)}
+                  error={errorsByTaskId[task.id]}
+                  onOpen={(opened) => onOpen?.(opened)}
+                  onStatusChange={(nextStatus) => moveTask(task.id, nextStatus)}
+                />
+              ))}
+            </KanbanColumn>
+          ))}
+        </div>
       </div>
     </DndContext>
   );

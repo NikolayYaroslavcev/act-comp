@@ -19,7 +19,7 @@ describe("shareList use-case", () => {
 
     const result = shareList("someone-else", list.id, { userId: "u2", access: "read" });
 
-    expect(result).toEqual({ status: "forbidden" });
+    expect(result).toEqual({ status: "not_found" });
   });
 
   it("returns not_found for an unknown list id", () => {

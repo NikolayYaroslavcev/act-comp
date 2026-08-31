@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { TaskEditForm } from "./task-edit-form";
@@ -155,7 +155,8 @@ describe("TaskEditForm submit", () => {
       <TaskEditForm task={makeTask({ deadline: "2026-09-01T00:00:00.000Z" })} listTasks={[]} isPending={false} onSubmit={onSubmit} onCancel={vi.fn()} />,
     );
 
-    fireEvent.change(screen.getByLabelText("Дедлайн"), { target: { value: "" } });
+    await user.click(screen.getByLabelText("Дедлайн"));
+    await user.click(screen.getByRole("button", { name: "Очистить" }));
     await user.click(screen.getByTestId("task-edit-save"));
 
     expect(onSubmit).toHaveBeenCalledWith({ deadline: null });

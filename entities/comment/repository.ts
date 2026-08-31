@@ -1,5 +1,6 @@
 import { getDb, saveDb } from "@/shared/lib/db";
 import type { Database } from "@/entities/database/schema";
+import { appendActivity } from "@/entities/activity/repository";
 import type { Comment } from "@/entities/comment/schema";
 
 export interface CreateCommentParams {
@@ -19,6 +20,14 @@ export function createComment(input: CreateCommentParams, now: Date = new Date()
   };
 
   db.comments[comment.id] = comment;
+  appendActivity(db, {
+    entityType: "task",
+    entityId: input.taskId,
+    action: "commented",
+    at: comment.createdAt,
+    byUserId: input.authorId,
+    metadata: { commentId: comment.id },
+  });
   saveDb(db);
   return comment;
 }

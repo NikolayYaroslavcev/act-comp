@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { jsonError, jsonOk } from "@/shared/lib/api-response";
 import { createListInputSchema } from "@/entities/list/requests";
 import { listLists } from "@/entities/list/repository";
+import { selectVisibleLists } from "@/entities/list/model";
 import { requireAuth } from "@/features/auth/require-auth";
 import { createList } from "@/features/list/create-list";
 
@@ -11,7 +12,7 @@ export async function GET(request: NextRequest) {
     return jsonError(401, "Unauthorized");
   }
 
-  return jsonOk(listLists());
+  return jsonOk(selectVisibleLists(listLists(), auth.user.id));
 }
 
 export async function POST(request: NextRequest) {

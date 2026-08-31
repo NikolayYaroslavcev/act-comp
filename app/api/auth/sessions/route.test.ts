@@ -5,6 +5,7 @@ import { POST as logoutAll } from "@/app/api/auth/logout-all/route";
 import { GET as getSessions } from "@/app/api/auth/sessions/route";
 import { SESSION_COOKIE_NAME } from "@/features/auth/session-cookie";
 import { createSession } from "@/entities/session/repository";
+import { deriveSessionDisplayId } from "@/entities/session/dto";
 
 async function loginAndGetSession() {
   const response = await login(
@@ -15,7 +16,8 @@ async function loginAndGetSession() {
     }),
   );
   const json = await response.json();
-  return { sessionId: json.data.session.id as string, userId: json.data.user.id as string };
+  const sessionId = response.cookies.get(SESSION_COOKIE_NAME)?.value as string;
+  return { sessionId, userId: json.data.user.id as string };
 }
 
 function sessionsRequest(sessionId?: string) {
@@ -33,7 +35,36 @@ describe("GET /api/auth/sessions", () => {
     const json = await response.json();
 
     expect(response.status).toBe(200);
-    expect(json.data.sessions.some((s: { id: string }) => s.id === sessionId)).toBe(true);
+    expect(json.data.sessions.some((s: { id: string }) => s.id === deriveSessionDisplayId(sessionId))).toBe(true);
+  });
+
+  it("never returns the real session id — only a display id derived from it", async () => {
+    const { sessionId, userId } = await loginAndGetSession();
+    const other = createSession({
+      userId,
+      ip: "192.0.2.46 (demo)",
+      device: "Firefox on Linux",
+      rememberMe: false,
+    });
+
+    const response = await getSessions(sessionsRequest(sessionId));
+    const json = await response.json();
+
+    const ids = json.data.sessions.map((s: { id: string }) => s.id);
+    expect(ids).not.toContain(sessionId);
+    expect(ids).not.toContain(other.id);
+    expect(ids).toContain(deriveSessionDisplayId(sessionId));
+    expect(ids).toContain(deriveSessionDisplayId(other.id));
+  });
+
+  it("still lets the current session's cookie authenticate after fetching its display id", async () => {
+    const { sessionId } = await loginAndGetSession();
+
+    const first = await getSessions(sessionsRequest(sessionId));
+    expect(first.status).toBe(200);
+
+    const second = await getSessions(sessionsRequest(sessionId));
+    expect(second.status).toBe(200);
   });
 
   it("includes active sessions", async () => {
@@ -48,7 +79,7 @@ describe("GET /api/auth/sessions", () => {
     const response = await getSessions(sessionsRequest(sessionId));
     const json = await response.json();
 
-    const found = json.data.sessions.find((s: { id: string }) => s.id === active.id);
+    const found = json.data.sessions.find((s: { id: string }) => s.id === deriveSessionDisplayId(active.id));
     expect(found).toBeTruthy();
     expect(found.revokedAt).toBeNull();
   });
@@ -72,7 +103,7 @@ describe("GET /api/auth/sessions", () => {
     const response = await getSessions(sessionsRequest(newSessionId));
     const json = await response.json();
 
-    const found = json.data.sessions.find((s: { id: string }) => s.id === otherSession.id);
+    const found = json.data.sessions.find((s: { id: string }) => s.id === deriveSessionDisplayId(otherSession.id));
     expect(found).toBeTruthy();
     expect(found.revokedAt).toBeTruthy();
   });
@@ -90,7 +121,7 @@ describe("GET /api/auth/sessions", () => {
     const json = await response.json();
 
     const ids = json.data.sessions.map((s: { id: string }) => s.id);
-    expect(ids.indexOf(newer.id)).toBeLessThan(ids.indexOf(sessionId));
+    expect(ids.indexOf(deriveSessionDisplayId(newer.id))).toBeLessThan(ids.indexOf(deriveSessionDisplayId(sessionId)));
   });
 
   it("does not return sessions belonging to other users", async () => {
@@ -105,7 +136,7 @@ describe("GET /api/auth/sessions", () => {
     const response = await getSessions(sessionsRequest(sessionId));
     const json = await response.json();
 
-    expect(json.data.sessions.some((s: { id: string }) => s.id === otherUserSession.id)).toBe(false);
+    expect(json.data.sessions.some((s: { id: string }) => s.id === deriveSessionDisplayId(otherUserSession.id))).toBe(false);
   });
 
   it("does not include passwordHash or other sensitive fields", async () => {
@@ -132,8 +163,8 @@ describe("GET /api/auth/sessions", () => {
     const response = await getSessions(sessionsRequest(sessionId));
     const json = await response.json();
 
-    const current = json.data.sessions.find((s: { id: string }) => s.id === sessionId);
-    const otherEntry = json.data.sessions.find((s: { id: string }) => s.id === other.id);
+    const current = json.data.sessions.find((s: { id: string }) => s.id === deriveSessionDisplayId(sessionId));
+    const otherEntry = json.data.sessions.find((s: { id: string }) => s.id === deriveSessionDisplayId(other.id));
     expect(current.isCurrent).toBe(true);
     expect(otherEntry.isCurrent).toBe(false);
   });
@@ -146,6 +177,27 @@ describe("GET /api/auth/sessions", () => {
   it("returns 401 for an unknown session id", async () => {
     const response = await getSessions(sessionsRequest("does-not-exist"));
     expect(response.status).toBe(401);
+  });
+
+  it("ignores a spoofed userId query and still returns only the current user's sessions", async () => {
+    const { sessionId } = await loginAndGetSession();
+    const otherUserSession = createSession({
+      userId: "spoofed-user-id",
+      ip: "192.0.2.45 (demo)",
+      device: "Chrome on Windows",
+      rememberMe: false,
+    });
+
+    const response = await getSessions(
+      new NextRequest("http://localhost/api/auth/sessions?userId=spoofed-user-id", {
+        method: "GET",
+        headers: { cookie: `${SESSION_COOKIE_NAME}=${sessionId}` },
+      }),
+    );
+    const json = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(json.data.sessions.some((s: { id: string }) => s.id === deriveSessionDisplayId(otherUserSession.id))).toBe(false);
   });
 
   it("returns 401 when the current session is revoked", async () => {

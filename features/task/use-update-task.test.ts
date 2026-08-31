@@ -1,5 +1,6 @@
-import { act, renderHook } from "@testing-library/react";
+import { act, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { renderHookWithStore } from "@/shared/store/test-utils";
 import { useUpdateTask } from "@/features/task/use-update-task";
 import type { UpdateTaskInput } from "@/entities/task/requests";
 
@@ -24,9 +25,10 @@ describe("useUpdateTask", () => {
         cascade: [{ taskId: "t2", isBlocked: false, recalculatedPriority: 4 }],
       },
     };
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, responseBody)));
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, responseBody));
+    vi.stubGlobal("fetch", fetchMock);
 
-    const { result } = renderHook(() => useUpdateTask());
+    const { result } = renderHookWithStore(() => useUpdateTask());
 
     let returned: unknown;
     await act(async () => {
@@ -36,13 +38,10 @@ describe("useUpdateTask", () => {
     expect(returned).toEqual(responseBody.data);
     expect(result.current.isPending).toBe(false);
     expect(result.current.error).toBeNull();
-    expect(fetch).toHaveBeenCalledWith(
-      "/api/tasks/t1",
-      expect.objectContaining({
-        method: "PATCH",
-        body: JSON.stringify(PATCH_INPUT),
-      }),
-    );
+    const request = fetchMock.mock.calls[0][0] as Request;
+    expect(request.url.endsWith("/api/tasks/t1")).toBe(true);
+    expect(request.method).toBe("PATCH");
+    expect(await request.json()).toEqual(PATCH_INPUT);
   });
 
   it("sets isPending while the request is in flight", async () => {
@@ -52,27 +51,27 @@ describe("useUpdateTask", () => {
     });
     vi.stubGlobal("fetch", vi.fn().mockReturnValue(pending));
 
-    const { result } = renderHook(() => useUpdateTask());
+    const { result } = renderHookWithStore(() => useUpdateTask());
 
     let updatePromise!: Promise<unknown>;
     act(() => {
       updatePromise = result.current.updateTask("t1", PATCH_INPUT);
     });
 
-    expect(result.current.isPending).toBe(true);
+    await waitFor(() => expect(result.current.isPending).toBe(true));
 
     resolveFetch(jsonResponse(200, { data: { task: {}, cascade: [] } }));
     await act(async () => {
       await updatePromise;
     });
 
-    expect(result.current.isPending).toBe(false);
+    await waitFor(() => expect(result.current.isPending).toBe(false));
   });
 
   it("shows a validation message for a 400 response", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(400, { error: { message: "Validation failed" } })));
 
-    const { result } = renderHook(() => useUpdateTask());
+    const { result } = renderHookWithStore(() => useUpdateTask());
 
     let returned: unknown;
     await act(async () => {
@@ -86,7 +85,7 @@ describe("useUpdateTask", () => {
   it("shows a session-expired message for a 401 response", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(401, { error: { message: "Unauthorized" } })));
 
-    const { result } = renderHook(() => useUpdateTask());
+    const { result } = renderHookWithStore(() => useUpdateTask());
 
     await act(async () => {
       await result.current.updateTask("t1", PATCH_INPUT);
@@ -101,7 +100,7 @@ describe("useUpdateTask", () => {
       vi.fn().mockResolvedValue(jsonResponse(403, { error: { message: "You do not have permission to edit this task" } })),
     );
 
-    const { result } = renderHook(() => useUpdateTask());
+    const { result } = renderHookWithStore(() => useUpdateTask());
 
     await act(async () => {
       await result.current.updateTask("t1", PATCH_INPUT);
@@ -113,7 +112,7 @@ describe("useUpdateTask", () => {
   it("shows a not-found message for a 404 response", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(404, { error: { message: "Task not found" } })));
 
-    const { result } = renderHook(() => useUpdateTask());
+    const { result } = renderHookWithStore(() => useUpdateTask());
 
     await act(async () => {
       await result.current.updateTask("t1", PATCH_INPUT);
@@ -128,7 +127,7 @@ describe("useUpdateTask", () => {
       vi.fn().mockResolvedValue(jsonResponse(409, { error: { message: "Update would create a dependency cycle" } })),
     );
 
-    const { result } = renderHook(() => useUpdateTask());
+    const { result } = renderHookWithStore(() => useUpdateTask());
 
     await act(async () => {
       await result.current.updateTask("t1", PATCH_INPUT);
@@ -140,7 +139,7 @@ describe("useUpdateTask", () => {
   it("shows a network error message when the request fails outright", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
 
-    const { result } = renderHook(() => useUpdateTask());
+    const { result } = renderHookWithStore(() => useUpdateTask());
 
     await act(async () => {
       await result.current.updateTask("t1", PATCH_INPUT);
@@ -153,7 +152,7 @@ describe("useUpdateTask", () => {
   it("shows a generic message for an unexpected server error", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(500, {})));
 
-    const { result } = renderHook(() => useUpdateTask());
+    const { result } = renderHookWithStore(() => useUpdateTask());
 
     await act(async () => {
       await result.current.updateTask("t1", PATCH_INPUT);

@@ -22,6 +22,10 @@ vi.mock("@/widgets/settings/settings-form", () => ({
   ),
 }));
 
+vi.mock("@/widgets/settings/sessions-section", () => ({
+  SessionsSection: () => <div data-testid="sessions-section" />,
+}));
+
 function cookieJar(sessionId?: string) {
   return {
     get: (name: string) =>
@@ -45,6 +49,7 @@ describe("SettingsPage", () => {
       "data-theme",
       findUserById("u2")!.settings.theme,
     );
+    expect(screen.getByTestId("sessions-section")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Настройки" })).toHaveAttribute("href", "/settings");
     expect(redirectMock).not.toHaveBeenCalled();
   });

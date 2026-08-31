@@ -66,7 +66,7 @@ export function createFileSessionStore(filePath: string): SessionStore {
 }
 
 /** Pure in-memory store, used under Vitest to keep tests fast, isolated per test file, and disk-free. */
-export function createMemorySessionStore(): SessionStore {
+function createMemorySessionStore(): SessionStore {
   let sessions: SessionsRecord | null = null;
 
   function ensure(): SessionsRecord {

@@ -2,11 +2,13 @@
 
 import type { Task, TaskStatus } from "@/entities/task/schema";
 import type { TaskFilterCriteria } from "@/entities/saved-filter/query-schema";
+import { fromDatetimeLocalValue, toDatetimeLocalValue } from "@/shared/lib/datetime-local";
 import { Button } from "@/shared/ui/button";
 import { Checkbox } from "@/shared/ui/checkbox";
+import { DatePicker } from "@/shared/ui/date-picker";
 import { Input } from "@/shared/ui/input";
 import { Label } from "@/shared/ui/label";
-import { Select } from "@/shared/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 
 interface TaskFiltersProps {
   tasks: Task[];
@@ -30,17 +32,7 @@ function distinctTags(tasks: Task[]): string[] {
   return [...new Set(tasks.flatMap((task) => task.tags))];
 }
 
-export function toDatetimeLocalValue(iso: string | null): string {
-  if (iso === null) return "";
-  const date = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-export function fromDatetimeLocalValue(value: string): string | null {
-  if (value === "") return null;
-  return new Date(value).toISOString();
-}
+export { fromDatetimeLocalValue, toDatetimeLocalValue };
 
 function clampPriority(value: string): number | null {
   if (value === "") return null;
@@ -68,21 +60,20 @@ export function TaskFilters({ tasks, draft, onDraftChange, onApply, onClear }: T
   }
 
   return (
-    <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-4">
-      <div className="space-y-1.5">
-        <Label htmlFor="task-filters-search">Поиск</Label>
-        <Input
-          id="task-filters-search"
-          data-testid="task-filters-search"
-          placeholder="Код, название, описание, категория, теги…"
-          value={draft.search}
-          onChange={(event) => onDraftChange({ ...draft, search: event.target.value })}
-        />
-      </div>
+    <div className="flex flex-col gap-3">
+      <Input
+        id="task-filters-search"
+        data-testid="task-filters-search"
+        aria-label="Поиск"
+        placeholder="Поиск: код, название, описание, категория, теги…"
+        value={draft.search}
+        onChange={(event) => onDraftChange({ ...draft, search: event.target.value })}
+        className="bg-background"
+      />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-1.5">
-          <span className="text-sm leading-none font-medium">Статус</span>
+          <span className="text-xs font-medium text-muted-foreground">Статус</span>
           <div className="flex flex-col gap-1.5 pt-1">
             {STATUS_OPTIONS.map((option) => (
               <div key={option.value} className="flex items-center gap-2">
@@ -101,24 +92,32 @@ export function TaskFilters({ tasks, draft, onDraftChange, onApply, onClear }: T
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="task-filters-category">Категория</Label>
+          <Label htmlFor="task-filters-category" className="text-xs font-medium text-muted-foreground">
+            Категория
+          </Label>
           <Select
-            id="task-filters-category"
-            data-testid="task-filters-category"
-            value={draft.category ?? ""}
-            onChange={(event) => onDraftChange({ ...draft, category: event.target.value === "" ? null : event.target.value })}
+            items={[{ value: "__all__", label: "Все категории" }, ...categories.map((category) => ({ value: category, label: category }))]}
+            value={draft.category ?? "__all__"}
+            onValueChange={(value) =>
+              onDraftChange({ ...draft, category: !value || value === "__all__" ? null : value })
+            }
           >
-            <option value="">Все категории</option>
-            {categories.map((category) => (
-              <option key={category} value={category}>
-                {category}
-              </option>
-            ))}
+            <SelectTrigger id="task-filters-category" data-testid="task-filters-category">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__" label="Все категории">Все категории</SelectItem>
+              {categories.map((category) => (
+                <SelectItem key={category} value={category} label={category}>
+                  {category}
+                </SelectItem>
+              ))}
+            </SelectContent>
           </Select>
 
           {tags.length > 0 && (
             <div className="flex flex-col gap-1.5 pt-2">
-              <span className="text-sm leading-none font-medium">Теги</span>
+              <span className="text-xs font-medium text-muted-foreground">Теги</span>
               {tags.map((tag) => (
                 <div key={tag} className="flex items-center gap-2">
                   <Checkbox
@@ -137,7 +136,9 @@ export function TaskFilters({ tasks, draft, onDraftChange, onApply, onClear }: T
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="task-filters-priority-min">Приоритет от</Label>
+          <Label htmlFor="task-filters-priority-min" className="text-xs font-medium text-muted-foreground">
+            Приоритет от
+          </Label>
           <Input
             id="task-filters-priority-min"
             data-testid="task-filters-priority-min"
@@ -147,7 +148,9 @@ export function TaskFilters({ tasks, draft, onDraftChange, onApply, onClear }: T
             value={draft.priorityMin ?? ""}
             onChange={(event) => onDraftChange({ ...draft, priorityMin: clampPriority(event.target.value) })}
           />
-          <Label htmlFor="task-filters-priority-max">Приоритет до</Label>
+          <Label htmlFor="task-filters-priority-max" className="text-xs font-medium text-muted-foreground">
+            Приоритет до
+          </Label>
           <Input
             id="task-filters-priority-max"
             data-testid="task-filters-priority-max"
@@ -160,30 +163,34 @@ export function TaskFilters({ tasks, draft, onDraftChange, onApply, onClear }: T
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="task-filters-deadline-from">Дедлайн от</Label>
-          <Input
+          <Label htmlFor="task-filters-deadline-from" className="text-xs font-medium text-muted-foreground">
+            Дедлайн от
+          </Label>
+          <DatePicker
             id="task-filters-deadline-from"
             data-testid="task-filters-deadline-from"
-            type="datetime-local"
-            value={toDatetimeLocalValue(draft.deadlineFrom)}
-            onChange={(event) => onDraftChange({ ...draft, deadlineFrom: fromDatetimeLocalValue(event.target.value) })}
+            includeTime
+            value={draft.deadlineFrom ? new Date(draft.deadlineFrom) : null}
+            onChange={(date) => onDraftChange({ ...draft, deadlineFrom: date ? date.toISOString() : null })}
           />
-          <Label htmlFor="task-filters-deadline-to">Дедлайн до</Label>
-          <Input
+          <Label htmlFor="task-filters-deadline-to" className="text-xs font-medium text-muted-foreground">
+            Дедлайн до
+          </Label>
+          <DatePicker
             id="task-filters-deadline-to"
             data-testid="task-filters-deadline-to"
-            type="datetime-local"
-            value={toDatetimeLocalValue(draft.deadlineTo)}
-            onChange={(event) => onDraftChange({ ...draft, deadlineTo: fromDatetimeLocalValue(event.target.value) })}
+            includeTime
+            value={draft.deadlineTo ? new Date(draft.deadlineTo) : null}
+            onChange={(date) => onDraftChange({ ...draft, deadlineTo: date ? date.toISOString() : null })}
           />
         </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Button data-testid="task-filters-apply" onClick={onApply}>
+        <Button type="button" data-testid="task-filters-apply" onClick={onApply}>
           Применить
         </Button>
-        <Button data-testid="task-filters-clear" variant="outline" onClick={onClear}>
+        <Button type="button" data-testid="task-filters-clear" variant="outline" onClick={onClear}>
           Очистить
         </Button>
       </div>

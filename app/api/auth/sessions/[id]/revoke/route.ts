@@ -13,11 +13,11 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
   }
 
   const { id } = await params;
-  revokeSession(id, auth.user.id);
+  const { revokedSessionId } = revokeSession(id, auth.user.id);
 
   const response = jsonOk({ success: true });
 
-  if (id === auth.session.id) {
+  if (revokedSessionId !== null && revokedSessionId === auth.session.id) {
     response.cookies.set(SESSION_COOKIE_NAME, "", {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

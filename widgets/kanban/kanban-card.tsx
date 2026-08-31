@@ -6,8 +6,9 @@ import type { Task, TaskStatus } from "@/entities/task/schema";
 import { isTaskOverdue } from "@/entities/task/model";
 import { Badge } from "@/shared/ui/badge";
 import { HighlightedText } from "@/shared/ui/highlighted-text";
-import { Select } from "@/shared/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/shared/ui/select";
 import { cn } from "@/shared/lib/utils";
+import { formatDate } from "@/shared/lib/format-date";
 import { GripVertical } from "lucide-react";
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
@@ -21,8 +22,6 @@ const STATUS_BADGE_VARIANT: Record<TaskStatus, "outline" | "default" | "muted"> 
   in_progress: "default",
   done: "muted",
 };
-
-const deadlineFormatter = new Intl.DateTimeFormat("ru", { dateStyle: "medium" });
 
 interface KanbanCardProps {
   task: Task;
@@ -49,7 +48,7 @@ export function KanbanCard({
 }: KanbanCardProps) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: task.id,
-    disabled: !canEdit || task.deletedAt !== null,
+    disabled: !canEdit || task.deletedAt !== null || blocked,
   });
   const overdue = isTaskOverdue(task, now);
   const completed = task.status === "done";
@@ -63,7 +62,7 @@ export function KanbanCard({
       data-completed={completed ? "true" : undefined}
       data-dragging={isDragging ? "true" : undefined}
       className={cn(
-        "flex max-w-full flex-col gap-2 rounded-lg border border-border bg-card p-3",
+        "motion-reduce:animate-none animate-in fade-in zoom-in-95 flex max-w-full flex-col gap-2 rounded-lg border border-border bg-card p-3 duration-300 ease-out",
         completed && "opacity-60",
         isDragging && "shadow-md",
       )}
@@ -73,7 +72,7 @@ export function KanbanCard({
           <button
             type="button"
             data-testid="kanban-drag-handle"
-            className="mt-0.5 shrink-0 rounded-md p-1 text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="mt-0.5 shrink-0 cursor-grab rounded-md p-1 text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
             aria-label={`Переместить задачу ${task.code}`}
             {...listeners}
             {...attributes}
@@ -119,7 +118,7 @@ export function KanbanCard({
           className={cn("tabular-nums text-muted-foreground", overdue && "font-medium text-destructive")}
           data-testid="task-deadline"
         >
-          {task.deadline ? deadlineFormatter.format(new Date(task.deadline)) : "Без дедлайна"}
+          {task.deadline ? formatDate(task.deadline) : "Без дедлайна"}
         </span>
       </div>
 
@@ -129,21 +128,29 @@ export function KanbanCard({
             Статус {task.code}
           </label>
           <Select
-            id={selectId}
-            data-testid="kanban-status-select"
+            items={STATUS_LABELS}
             value={task.status}
             disabled={isPending}
-            aria-label={`Статус ${task.code}`}
-            onChange={(event) => {
-              const next = event.target.value as TaskStatus;
-              if (next !== task.status) {
-                onStatusChange(next);
+            onValueChange={(next) => {
+              if (next === "new" || next === "in_progress" || next === "done") {
+                if (next !== task.status) {
+                  onStatusChange(next);
+                }
               }
             }}
           >
-            <option value="new">{STATUS_LABELS.new}</option>
-            <option value="in_progress">{STATUS_LABELS.in_progress}</option>
-            <option value="done">{STATUS_LABELS.done}</option>
+            <SelectTrigger
+              id={selectId}
+              data-testid="kanban-status-select"
+              aria-label={`Статус ${task.code}`}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="new" label={STATUS_LABELS.new}>{STATUS_LABELS.new}</SelectItem>
+              <SelectItem value="in_progress" label={STATUS_LABELS.in_progress}>{STATUS_LABELS.in_progress}</SelectItem>
+              <SelectItem value="done" label={STATUS_LABELS.done}>{STATUS_LABELS.done}</SelectItem>
+            </SelectContent>
           </Select>
         </div>
       )}

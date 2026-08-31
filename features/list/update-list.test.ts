@@ -25,12 +25,12 @@ describe("updateList use-case", () => {
     }
   });
 
-  it("does not allow a user who is not the owner to change the list", () => {
+  it("returns not_found for a user with no relation to the list (cannot view it)", () => {
     const list = createList("u-usecase-owner2", { title: "Old", template: "work", deadline: null });
 
     const result = updateList("someone-else", list.id, { title: "Hijacked" });
 
-    expect(result).toEqual({ status: "forbidden" });
+    expect(result).toEqual({ status: "not_found" });
   });
 
   it("returns not_found for an unknown list id", () => {

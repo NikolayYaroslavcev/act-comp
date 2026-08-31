@@ -12,6 +12,24 @@ function seedDb(): Database {
   return databaseSchema.parse(structuredClone(data));
 }
 
+function parsePersistedDb(raw: string): Database {
+  const json: unknown = JSON.parse(raw);
+  const parsed = databaseSchema.safeParse(json);
+  if (parsed.success) {
+    return parsed.data;
+  }
+
+  const onlyUnknownActivityActions =
+    parsed.error.issues.length > 0 &&
+    parsed.error.issues.every((issue) => issue.path[0] === "activityLog" && issue.path[2] === "action");
+
+  if (onlyUnknownActivityActions) {
+    return json as Database;
+  }
+
+  throw parsed.error;
+}
+
 /**
  * File-backed application data store, shared over the filesystem instead of
  * a JS module singleton. Next.js bundles Route Handlers, Server Components,
@@ -40,7 +58,7 @@ export function createFileDbStore(filePath: string): DbStore {
       }
       throw error;
     }
-    return databaseSchema.parse(JSON.parse(raw));
+    return parsePersistedDb(raw);
   }
 
   function writeAll(db: Database): void {
@@ -57,7 +75,7 @@ export function createFileDbStore(filePath: string): DbStore {
 }
 
 /** Pure in-memory store, used under Vitest to keep tests fast, isolated per test file, and disk-free. */
-export function createMemoryDbStore(): DbStore {
+function createMemoryDbStore(): DbStore {
   let db: Database | null = null;
 
   return {

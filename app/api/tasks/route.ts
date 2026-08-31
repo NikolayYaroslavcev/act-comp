@@ -37,6 +37,8 @@ export async function POST(request: NextRequest) {
       return jsonError(404, "List not found");
     case "forbidden":
       return jsonError(403, "You do not have permission to create tasks in this list");
+    case "invalid_parent":
+      return jsonError(400, "Invalid parentId");
     case "ok":
       return jsonOk(result.task, 201);
   }

@@ -6,12 +6,15 @@ export const createTaskInputSchema = z.object({
   listId: idSchema,
   title: z.string().min(1).max(300),
   description: z.string().max(5000).optional().default(""),
-  priority: taskPrioritySchema.optional().default(3),
-  category: z.string().min(1).nullable().optional().default(null),
+  // priority/category/estimatedMin intentionally have no schema-level default:
+  // an omitted field must stay undefined so createTask can fall back to the
+  // creating user's settings.taskDefaults instead of a fixed value.
+  priority: taskPrioritySchema.optional(),
+  category: z.string().min(1).nullable().optional(),
   tags: z.array(z.string().min(1)).optional().default([]),
   parentId: idSchema.nullable().optional().default(null),
   deadline: isoDateTimeSchema.nullable().optional().default(null),
-  estimatedMin: z.number().int().nonnegative().optional().default(0),
+  estimatedMin: z.number().int().nonnegative().optional(),
 });
 
 export const updateTaskInputSchema = z
@@ -34,6 +37,10 @@ export const updateTaskInputSchema = z
 
 export const timerActionInputSchema = z.strictObject({
   action: z.enum(["start", "pause", "resume", "stop"]),
+});
+
+export const rollbackTaskInputSchema = z.strictObject({
+  historyIndex: z.number().int().nonnegative(),
 });
 
 export type CreateTaskInput = z.infer<typeof createTaskInputSchema>;

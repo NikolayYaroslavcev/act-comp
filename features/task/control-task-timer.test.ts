@@ -85,4 +85,24 @@ describe("controlTaskTimerForUser", () => {
 
     expect(controlTaskTimerForUser("u-owner-8", task.id, "start").status).toBe("invalid_transition");
   });
+
+  it("pauses a running timer and persists working elapsed for the owner", () => {
+    const list = createList("u-owner-9", { title: "Owned", template: "work", deadline: null });
+    const task = makeTaskIn(list.id);
+    applyTaskTimer(task.id, "u-owner-9", "start", new Date("2026-08-29T10:00:00.000Z"));
+
+    const result = controlTaskTimerForUser(
+      "u-owner-9",
+      task.id,
+      "pause",
+      new Date("2026-08-29T10:05:00.000Z"),
+    );
+
+    expect(result.status).toBe("ok");
+    if (result.status === "ok") {
+      expect(result.task.timeSpentMin).toBe(5);
+      expect(result.task.timerPausedAt).toBe("2026-08-29T10:05:00.000Z");
+    }
+    expect(findTaskById(task.id)?.timeSpentMin).toBe(5);
+  });
 });

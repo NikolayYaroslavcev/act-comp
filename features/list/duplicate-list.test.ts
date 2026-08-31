@@ -20,7 +20,7 @@ describe("duplicateList use-case", () => {
 
     const result = duplicateList("someone-else", list.id, { copyTasks: false, copySharedWith: false });
 
-    expect(result).toEqual({ status: "forbidden" });
+    expect(result).toEqual({ status: "not_found" });
   });
 
   it("returns not_found for an unknown list id", () => {

@@ -10,4 +10,8 @@ describe("getSystemStats", () => {
       totalTasks: countTasks(),
     });
   });
+
+  it("returns only aggregate counts, not private user or task fields", () => {
+    expect(Object.keys(getSystemStats()).sort()).toEqual(["totalTasks", "totalUsers"]);
+  });
 });

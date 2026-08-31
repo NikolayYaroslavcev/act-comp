@@ -1,21 +1,26 @@
 import type { NextRequest } from "next/server";
 import { jsonError, jsonOk } from "@/shared/lib/api-response";
 import { updateListInputSchema } from "@/entities/list/requests";
-import { findListById } from "@/entities/list/repository";
 import { requireAuth } from "@/features/auth/require-auth";
+import { getVisibleList } from "@/features/list/get-list";
 import { updateList } from "@/features/list/update-list";
 import { deleteList } from "@/features/list/delete-list";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-export async function GET(_request: NextRequest, { params }: RouteContext) {
+export async function GET(request: NextRequest, { params }: RouteContext) {
+  const auth = requireAuth(request);
+  if (!auth.authorized) {
+    return jsonError(401, "Unauthorized");
+  }
+
   const { id } = await params;
-  const list = findListById(id);
-  if (!list) {
+  const result = getVisibleList(auth.user.id, id);
+  if (result.status === "not_found") {
     return jsonError(404, "List not found");
   }
 
-  return jsonOk(list);
+  return jsonOk(result.list);
 }
 
 export async function PATCH(request: NextRequest, { params }: RouteContext) {

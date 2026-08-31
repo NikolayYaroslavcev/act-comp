@@ -1,5 +1,5 @@
 import type { Task } from "@/entities/task/schema";
-import type { ListShare, SharedAccess, TaskList } from "@/entities/list/schema";
+import type { ListShare, ListTemplate, SharedAccess, TaskList } from "@/entities/list/schema";
 import type { Activity } from "@/entities/activity/schema";
 import type { HistoryEntry } from "@/entities/common/schema";
 import type { UpdateListInput } from "@/entities/list/requests";
@@ -34,6 +34,108 @@ export function calculateListPriority(tasks: Task[], now: Date = new Date()): nu
 
 export function isListDeadlineOverdue(list: TaskList, now: Date): boolean {
   return list.deadline !== null && new Date(list.deadline).getTime() < now.getTime();
+}
+
+/**
+ * Search/filter operate on this minimal structural shape (title/template/
+ * deadline) rather than the full TaskList, so both a raw TaskList and a
+ * DashboardListSummary (features/dashboard/dashboard-lists.ts) satisfy it
+ * without a second, parallel implementation.
+ */
+interface ListSearchable {
+  title: string;
+  template: ListTemplate;
+  deadline: string | null;
+}
+
+export function searchLists<T extends ListSearchable>(lists: T[], query: string): T[] {
+  const normalized = query.trim().toLowerCase();
+  if (normalized === "") {
+    return [...lists];
+  }
+
+  return lists.filter((list) => list.title.toLowerCase().includes(normalized));
+}
+
+export interface ListFilters {
+  template?: ListTemplate[];
+  deadlineFrom?: string;
+  deadlineTo?: string;
+}
+
+function listMatchesDeadlineRange(list: ListSearchable, filters: ListFilters): boolean {
+  if (filters.deadlineFrom === undefined && filters.deadlineTo === undefined) {
+    return true;
+  }
+  if (list.deadline === null) {
+    return false;
+  }
+
+  const deadlineMs = new Date(list.deadline).getTime();
+  if (filters.deadlineFrom !== undefined && deadlineMs < new Date(filters.deadlineFrom).getTime()) {
+    return false;
+  }
+  if (filters.deadlineTo !== undefined && deadlineMs > new Date(filters.deadlineTo).getTime()) {
+    return false;
+  }
+  return true;
+}
+
+function listMatchesFilters(list: ListSearchable, filters: ListFilters): boolean {
+  if (filters.template && filters.template.length > 0 && !filters.template.includes(list.template)) {
+    return false;
+  }
+  return listMatchesDeadlineRange(list, filters);
+}
+
+export function filterLists<T extends ListSearchable>(lists: T[], filters: ListFilters): T[] {
+  return lists.filter((list) => listMatchesFilters(list, filters));
+}
+
+export interface ListQuery {
+  search: string;
+  filters: ListFilters;
+}
+
+export function applyListQuery<T extends ListSearchable>(lists: T[], query: ListQuery): T[] {
+  return filterLists(searchLists(lists, query.search), query.filters);
+}
+
+export type ListUrgency = "normal" | "warning" | "urgent";
+
+// Same "due soon" window as the task Smart Priority algorithm
+// (entities/task/model.ts DUE_SOON_WINDOW_MS) — one shared notion of "soon"
+// rather than a second, list-specific scale.
+const URGENCY_WARNING_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+function isDueSoon(deadline: string | null, now: Date): boolean {
+  if (deadline === null) {
+    return false;
+  }
+  const msUntilDeadline = new Date(deadline).getTime() - now.getTime();
+  return msUntilDeadline >= 0 && msUntilDeadline <= URGENCY_WARNING_WINDOW_MS;
+}
+
+/**
+ * Colour-coded urgency for a list card (ТЗ: "красный - есть просроченные,
+ * жёлтый - скоро дедлайн"). Reuses isTaskOverdue/isListDeadlineOverdue for
+ * the "urgent" signal rather than recomputing overdue-ness, and only adds
+ * the "warning" (due soon, not yet overdue) tier on top.
+ */
+export function calculateListUrgency(list: TaskList, tasks: Task[], now: Date = new Date()): ListUrgency {
+  const openTasks = tasks.filter((task) => task.status !== "done" && task.deletedAt === null);
+
+  const hasOverdueTask = openTasks.some((task) => isTaskOverdue(task, now));
+  if (hasOverdueTask || isListDeadlineOverdue(list, now)) {
+    return "urgent";
+  }
+
+  const hasDueSoonTask = openTasks.some((task) => isDueSoon(task.deadline, now));
+  if (hasDueSoonTask || isDueSoon(list.deadline, now)) {
+    return "warning";
+  }
+
+  return "normal";
 }
 
 export function sortListsByPriority<T extends { priority: number }>(lists: T[]): T[] {

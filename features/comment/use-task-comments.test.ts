@@ -1,5 +1,6 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { renderHookWithStore } from "@/shared/store/test-utils";
 import { useTaskComments } from "@/features/comment/use-task-comments";
 import type { CommentWithAuthor } from "@/entities/comment/dto";
 
@@ -29,22 +30,24 @@ afterEach(() => {
 describe("useTaskComments (loading)", () => {
   it("loads comments for the given task on mount", async () => {
     const comment = makeComment({});
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, { data: [comment] })));
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, { data: [comment] }));
+    vi.stubGlobal("fetch", fetchMock);
 
-    const { result } = renderHook(() => useTaskComments("t1"));
+    const { result } = renderHookWithStore(() => useTaskComments("t1"));
 
     expect(result.current.isLoading).toBe(true);
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     expect(result.current.comments).toEqual([comment]);
     expect(result.current.loadError).toBeNull();
-    expect(fetch).toHaveBeenCalledWith("/api/tasks/t1/comments");
+    const request = fetchMock.mock.calls[0][0] as Request;
+    expect(request.url.endsWith("/api/tasks/t1/comments")).toBe(true);
   });
 
   it("shows a not-found message for a 404 response", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(404, { error: { message: "Task not found" } })));
 
-    const { result } = renderHook(() => useTaskComments("t1"));
+    const { result } = renderHookWithStore(() => useTaskComments("t1"));
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.loadError).toBe("Комментарии: задача недоступна или была удалена");
@@ -53,7 +56,7 @@ describe("useTaskComments (loading)", () => {
   it("shows a session-expired message for a 401 response", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(401, { error: { message: "Unauthorized" } })));
 
-    const { result } = renderHook(() => useTaskComments("t1"));
+    const { result } = renderHookWithStore(() => useTaskComments("t1"));
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.loadError).toBe("Комментарии: сессия истекла. Войдите снова");
@@ -62,7 +65,7 @@ describe("useTaskComments (loading)", () => {
   it("shows a network error message when the request fails outright", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
 
-    const { result } = renderHook(() => useTaskComments("t1"));
+    const { result } = renderHookWithStore(() => useTaskComments("t1"));
 
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.loadError).toBe("Комментарии: нет соединения с сервером. Проверьте подключение к интернету");
@@ -77,7 +80,7 @@ describe("useTaskComments (addComment)", () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(201, { data: created }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const { result } = renderHook(() => useTaskComments("t1"));
+    const { result } = renderHookWithStore(() => useTaskComments("t1"));
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     let ok: boolean | undefined;
@@ -87,13 +90,10 @@ describe("useTaskComments (addComment)", () => {
 
     expect(ok).toBe(true);
     expect(result.current.comments).toEqual([created]);
-    expect(fetchMock).toHaveBeenLastCalledWith(
-      "/api/tasks/t1/comments",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({ text: "New comment" }),
-      }),
-    );
+    const postRequest = fetchMock.mock.calls[1][0] as Request;
+    expect(postRequest.url.endsWith("/api/tasks/t1/comments")).toBe(true);
+    expect(postRequest.method).toBe("POST");
+    expect(await postRequest.json()).toEqual({ text: "New comment" });
   });
 
   it("sets isSubmitting while the request is in flight", async () => {
@@ -106,7 +106,7 @@ describe("useTaskComments (addComment)", () => {
     fetchMock.mockReturnValueOnce(pending);
     vi.stubGlobal("fetch", fetchMock);
 
-    const { result } = renderHook(() => useTaskComments("t1"));
+    const { result } = renderHookWithStore(() => useTaskComments("t1"));
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     let submitPromise!: Promise<boolean>;
@@ -134,7 +134,7 @@ describe("useTaskComments (addComment)", () => {
     fetchMock.mockReturnValueOnce(pending);
     vi.stubGlobal("fetch", fetchMock);
 
-    const { result } = renderHook(() => useTaskComments("t1"));
+    const { result } = renderHookWithStore(() => useTaskComments("t1"));
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     let first!: Promise<boolean>;
@@ -144,7 +144,11 @@ describe("useTaskComments (addComment)", () => {
       second = result.current.addComment("Hi again");
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(2); // 1 load + 1 submit
+    // The guard rejects the second call synchronously; only the first
+    // mutation ever reaches the network, but its own request is dispatched
+    // asynchronously (via the mutation thunk), so wait for it to land
+    // instead of asserting immediately after the synchronous act() call.
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2)); // 1 load + 1 submit
 
     resolvePost(jsonResponse(201, { data: makeComment({}) }));
     await act(async () => {
@@ -163,7 +167,7 @@ describe("useTaskComments (addComment)", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    const { result } = renderHook(() => useTaskComments("t1"));
+    const { result } = renderHookWithStore(() => useTaskComments("t1"));
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     let ok: boolean | undefined;
@@ -182,7 +186,7 @@ describe("useTaskComments (addComment)", () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(400, { error: { message: "Validation failed" } }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const { result } = renderHook(() => useTaskComments("t1"));
+    const { result } = renderHookWithStore(() => useTaskComments("t1"));
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     await act(async () => {
@@ -198,7 +202,7 @@ describe("useTaskComments (addComment)", () => {
     fetchMock.mockRejectedValueOnce(new TypeError("Failed to fetch"));
     vi.stubGlobal("fetch", fetchMock);
 
-    const { result } = renderHook(() => useTaskComments("t1"));
+    const { result } = renderHookWithStore(() => useTaskComments("t1"));
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     await act(async () => {

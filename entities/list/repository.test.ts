@@ -85,20 +85,29 @@ describe("updateList", () => {
     }
   });
 
-  it("returns forbidden for a user with no relation to the list", () => {
+  it("returns not_found for a user with no relation to the list (cannot view it)", () => {
     const list = createList("u-update-2", { title: "Owned", template: "work", deadline: null });
 
     const result = updateList(list.id, "someone-else", { title: "Hijacked" });
 
-    expect(result).toEqual({ status: "forbidden" });
+    expect(result).toEqual({ status: "not_found" });
   });
 
-  it("does not change the list when the update is forbidden", () => {
+  it("does not change the list when the caller cannot view it", () => {
     const list = createList("u-update-3", { title: "Owned", template: "work", deadline: null });
 
     updateList(list.id, "someone-else", { title: "Hijacked" });
 
     expect(findListById(list.id)?.title).toBe("Owned");
+  });
+
+  it("returns not_found for a stranger targeting an already soft-deleted list", () => {
+    const list = createList("u-update-15", { title: "Owned", template: "work", deadline: null });
+    (findListById(list.id) as { deletedAt: string | null }).deletedAt = "2026-08-10T00:00:00.000Z";
+
+    const result = updateList(list.id, "someone-else", { title: "Hijacked" });
+
+    expect(result).toEqual({ status: "not_found" });
   });
 
   it("does not change ownerId", () => {
@@ -235,12 +244,12 @@ describe("deleteList", () => {
     expect(result).toEqual({ status: "not_found" });
   });
 
-  it("returns forbidden for a user who does not own the list", () => {
+  it("returns not_found for a user with no relation to the list (cannot view it)", () => {
     const list = createList("u-delete-1", { title: "Owned", template: "work", deadline: null });
 
     const result = deleteList(list.id, "someone-else");
 
-    expect(result).toEqual({ status: "forbidden" });
+    expect(result).toEqual({ status: "not_found" });
   });
 
   it("returns forbidden for an edit-access shared user", () => {
@@ -252,7 +261,25 @@ describe("deleteList", () => {
     expect(result).toEqual({ status: "forbidden" });
   });
 
-  it("does not change the list when the delete is forbidden", () => {
+  it("returns forbidden for a read-only shared user", () => {
+    const list = createList("u-delete-2b", { title: "Owned", template: "work", deadline: null });
+    findListById(list.id)!.sharedWith.push({ userId: "u-viewer", access: "read" });
+
+    const result = deleteList(list.id, "u-viewer");
+
+    expect(result).toEqual({ status: "forbidden" });
+  });
+
+  it("returns not_found for a stranger targeting an already soft-deleted list", () => {
+    const list = createList("u-delete-2c", { title: "Owned", template: "work", deadline: null });
+    deleteList(list.id, "u-delete-2c");
+
+    const result = deleteList(list.id, "someone-else");
+
+    expect(result).toEqual({ status: "not_found" });
+  });
+
+  it("does not change the list when the caller cannot view it", () => {
     const list = createList("u-delete-3", { title: "Owned", template: "work", deadline: null });
 
     deleteList(list.id, "someone-else");
@@ -374,13 +401,13 @@ describe("restoreList", () => {
     expect(result).toEqual({ status: "not_found" });
   });
 
-  it("returns forbidden for a user who does not own the list", () => {
+  it("returns not_found for a user who does not own the list", () => {
     const list = createList("u-restore-1", { title: "Owned", template: "work", deadline: null });
     deleteList(list.id, "u-restore-1");
 
     const result = restoreList(list.id, "someone-else", new Date());
 
-    expect(result).toEqual({ status: "forbidden" });
+    expect(result).toEqual({ status: "not_found" });
   });
 
   it("returns forbidden for an edit-access shared user", () => {
@@ -577,12 +604,12 @@ describe("duplicateList", () => {
     expect(result).toEqual({ status: "not_found" });
   });
 
-  it("returns forbidden for a user with no relation to the list", () => {
+  it("returns not_found for a user with no relation to the list", () => {
     const list = createList("u-dup-1", { title: "Owned", template: "work", deadline: null });
 
     const result = duplicateList(list.id, "someone-else", NO_COPY);
 
-    expect(result).toEqual({ status: "forbidden" });
+    expect(result).toEqual({ status: "not_found" });
   });
 
   it("allows the owner to duplicate", () => {
@@ -812,12 +839,12 @@ describe("shareList", () => {
     expect(result).toEqual({ status: "not_found" });
   });
 
-  it("returns forbidden for a caller who does not own the list", () => {
+  it("returns not_found for a caller who does not own the list", () => {
     const list = createList("u-share-2", { title: "Owned", template: "work", deadline: null });
 
     const result = shareList(list.id, "someone-else", { userId: "u2", access: "read" });
 
-    expect(result).toEqual({ status: "forbidden" });
+    expect(result).toEqual({ status: "not_found" });
   });
 
   it("returns forbidden for an edit-access shared user (only the owner may manage sharing)", () => {

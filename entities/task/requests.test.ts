@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createTaskInputSchema, timerActionInputSchema, updateTaskInputSchema } from "@/entities/task/requests";
+import {
+  createTaskInputSchema,
+  rollbackTaskInputSchema,
+  timerActionInputSchema,
+  updateTaskInputSchema,
+} from "@/entities/task/requests";
 
 describe("createTaskInputSchema", () => {
   it("applies defaults for optional fields", () => {
@@ -7,10 +12,18 @@ describe("createTaskInputSchema", () => {
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.description).toBe("");
-      expect(result.data.priority).toBe(3);
       expect(result.data.tags).toEqual([]);
-      expect(result.data.category).toBeNull();
       expect(result.data.deadline).toBeNull();
+    }
+  });
+
+  it("leaves priority/category/estimatedMin undefined when omitted, so callers can apply user taskDefaults", () => {
+    const result = createTaskInputSchema.safeParse({ listId: "l1", title: "New task" });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.priority).toBeUndefined();
+      expect(result.data.category).toBeUndefined();
+      expect(result.data.estimatedMin).toBeUndefined();
     }
   });
 
@@ -117,6 +130,28 @@ describe("timerActionInputSchema", () => {
       timerStartedAt: "2020-01-01T00:00:00.000Z",
       timerPausedAt: "2020-01-01T00:00:00.000Z",
       timeSpentMin: 40,
+    });
+
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("rollbackTaskInputSchema", () => {
+  it("accepts a historyIndex identifying a version on this task", () => {
+    const result = rollbackTaskInputSchema.safeParse({ historyIndex: 0 });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a missing historyIndex", () => {
+    expect(rollbackTaskInputSchema.safeParse({}).success).toBe(false);
+  });
+
+  it("rejects client-supplied identity and runtime fields", () => {
+    const result = rollbackTaskInputSchema.safeParse({
+      historyIndex: 0,
+      userId: "spoofed",
+      taskId: "spoofed",
+      title: "nope",
     });
 
     expect(result.success).toBe(false);
