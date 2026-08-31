@@ -143,7 +143,7 @@ function createSessionStore(): SessionStore {
   if (process.env.VITEST) {
     return createMemorySessionStore();
   }
-  if (process.env.BLOB_READ_WRITE_TOKEN) {
+  if (process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID) {
     return createBlobSessionStore("sessions.json");
   }
   return createFileSessionStore(DEFAULT_STATE_PATH);

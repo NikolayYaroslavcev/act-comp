@@ -144,7 +144,7 @@ function createDbStore(): DbStore {
   if (process.env.VITEST) {
     return createMemoryDbStore();
   }
-  if (process.env.BLOB_READ_WRITE_TOKEN) {
+  if (process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID) {
     return createBlobDbStore("db.json");
   }
   return createFileDbStore(DEFAULT_STATE_PATH);

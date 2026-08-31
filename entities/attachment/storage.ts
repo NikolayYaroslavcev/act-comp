@@ -107,7 +107,7 @@ function createAttachmentBlobStore(): AttachmentBlobStore {
   if (process.env.VITEST) {
     return createMemoryAttachmentBlobStore();
   }
-  if (process.env.BLOB_READ_WRITE_TOKEN) {
+  if (process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID) {
     return createBlobAttachmentBlobStore();
   }
   return createFileAttachmentBlobStore(DEFAULT_ATTACHMENTS_DIR);
