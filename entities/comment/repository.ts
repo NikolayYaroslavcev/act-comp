@@ -9,8 +9,8 @@ export interface CreateCommentParams {
   text: string;
 }
 
-export function createComment(input: CreateCommentParams, now: Date = new Date()): Comment {
-  const db = getDb();
+export async function createComment(input: CreateCommentParams, now: Date = new Date()): Promise<Comment> {
+  const db = await getDb();
   const comment: Comment = {
     id: crypto.randomUUID(),
     taskId: input.taskId,
@@ -28,12 +28,13 @@ export function createComment(input: CreateCommentParams, now: Date = new Date()
     byUserId: input.authorId,
     metadata: { commentId: comment.id },
   });
-  saveDb(db);
+  await saveDb(db);
   return comment;
 }
 
-export function listCommentsForTask(taskId: string, db: Database = getDb()): Comment[] {
-  return Object.values(db.comments)
+export async function listCommentsForTask(taskId: string, db?: Database): Promise<Comment[]> {
+  const resolved = db ?? (await getDb());
+  return Object.values(resolved.comments)
     .filter((comment) => comment.taskId === taskId)
     .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() || a.id.localeCompare(b.id));
 }

@@ -7,7 +7,7 @@ import { exportListPdf, exportPdfBodySchema } from "@/features/export/export-lis
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function POST(request: NextRequest, { params }: RouteContext) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if (!auth.authorized) {
     return jsonError(401, "Unauthorized");
   }

@@ -35,7 +35,7 @@ function parseCriteriaForScope(scope: "tasks" | "lists", criteria: unknown) {
 }
 
 export async function GET(request: NextRequest) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if (!auth.authorized) {
     return jsonError(401, "Unauthorized");
   }
@@ -46,11 +46,11 @@ export async function GET(request: NextRequest) {
     return jsonError(400, "Invalid scope");
   }
 
-  return jsonOk(listSavedFiltersForUser(auth.user.id, scopeResult.data));
+  return jsonOk(await listSavedFiltersForUser(auth.user.id, scopeResult.data));
 }
 
 export async function POST(request: NextRequest) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if (!auth.authorized) {
     return jsonError(401, "Unauthorized");
   }
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (parsed.data.action === "touch") {
-    const result = touchSavedFilterForUser(auth.user.id, parsed.data.id);
+    const result = await touchSavedFilterForUser(auth.user.id, parsed.data.id);
     if (result.status === "not_found") {
       return jsonError(404, "Saved filter not found");
     }
@@ -81,8 +81,8 @@ export async function POST(request: NextRequest) {
 
   const filter =
     parsed.data.action === "apply"
-      ? applyFilterForUser(auth.user.id, parsed.data.scope, criteria)
-      : saveFilterForUser(auth.user.id, parsed.data.scope, criteria, parsed.data.label);
+      ? await applyFilterForUser(auth.user.id, parsed.data.scope, criteria)
+      : await saveFilterForUser(auth.user.id, parsed.data.scope, criteria, parsed.data.label);
 
   return jsonOk(filter, 201);
 }

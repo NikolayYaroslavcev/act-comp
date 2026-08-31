@@ -34,7 +34,7 @@ function cookieJar(sessionId?: string) {
 
 describe("DashboardPage — authenticated visitor", () => {
   it("renders the welcome screen using the current session's user and system stats", async () => {
-    const session = createSession({
+    const session = await createSession({
       userId: "u1",
       ip: "192.0.2.5 (demo)",
       device: "Chrome on Windows",
@@ -51,7 +51,7 @@ describe("DashboardPage — authenticated visitor", () => {
   });
 
   it("renders a list card for every list the current user can see", async () => {
-    const session = createSession({
+    const session = await createSession({
       userId: "u1",
       ip: "192.0.2.5 (demo)",
       device: "Chrome on Windows",

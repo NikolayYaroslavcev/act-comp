@@ -13,14 +13,14 @@ export interface RevokeSessionResult {
  * scoped to the caller's own sessions, so it can't be used to probe or
  * revoke another user's session even if their display id were somehow known.
  */
-export function revokeSession(displaySessionId: string, userId: string): RevokeSessionResult {
-  const match = getSessionsByUserId(userId).find(
+export async function revokeSession(displaySessionId: string, userId: string): Promise<RevokeSessionResult> {
+  const match = (await getSessionsByUserId(userId)).find(
     (session) => deriveSessionDisplayId(session.id) === displaySessionId,
   );
   if (!match) {
     return { revokedSessionId: null };
   }
 
-  revokeSessionForUser(match.id, userId);
+  await revokeSessionForUser(match.id, userId);
   return { revokedSessionId: match.id };
 }

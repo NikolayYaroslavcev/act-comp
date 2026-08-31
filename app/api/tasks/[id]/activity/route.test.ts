@@ -13,12 +13,12 @@ function activityRequest(taskId: string, sessionId: string | undefined, query = 
   });
 }
 
-function callGet(taskId: string, request: NextRequest) {
-  return GET(request, { params: Promise.resolve({ id: taskId }) });
+async function callGet(taskId: string, request: NextRequest) {
+  return await GET(request, { params: Promise.resolve({ id: taskId }) });
 }
 
-function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
-  return createSession({
+async function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
+  return await createSession({
     userId,
     ip: `192.0.2.${suffix} (demo)`,
     device: "Chrome on Windows",
@@ -26,8 +26,8 @@ function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
   });
 }
 
-function makeTaskIn(listId: string) {
-  return createTask({
+async function makeTaskIn(listId: string) {
+  return await createTask({
     listId,
     title: "Task",
     description: "",
@@ -42,8 +42,8 @@ function makeTaskIn(listId: string) {
 
 describe("GET /api/tasks/[id]/activity", () => {
   it("returns 401 when no session cookie is present", async () => {
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callGet(task.id, activityRequest(task.id, undefined));
 
@@ -51,10 +51,10 @@ describe("GET /api/tasks/[id]/activity", () => {
   });
 
   it("returns 401 for a revoked session", async () => {
-    const session = sessionFor("u1", "500");
-    revokeSession(session.id);
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "500");
+    await revokeSession(session.id);
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callGet(task.id, activityRequest(task.id, session.id));
 
@@ -62,17 +62,17 @@ describe("GET /api/tasks/[id]/activity", () => {
   });
 
   it("returns 200 with activity for the owner, newest first", async () => {
-    const session = sessionFor("u1", "501");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    recordActivity({
+    const session = await sessionFor("u1", "501");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    await recordActivity({
       entityType: "task",
       entityId: task.id,
       action: "created",
       at: "2026-08-30T09:00:00.000Z",
       byUserId: "u1",
     });
-    updateTask(task.id, "u1", { priority: 5 }, new Date("2026-08-30T10:00:00.000Z"));
+    await updateTask(task.id, "u1", { priority: 5 }, new Date("2026-08-30T10:00:00.000Z"));
 
     const response = await callGet(task.id, activityRequest(task.id, session.id));
 
@@ -84,18 +84,18 @@ describe("GET /api/tasks/[id]/activity", () => {
   });
 
   it("returns 200 for shared-read and shared-edit", async () => {
-    const reader = sessionFor("u2", "502");
-    const editor = sessionFor("u3", "503");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "read" }, { userId: "u3", access: "edit" });
-    const task = makeTaskIn(list.id);
+    const reader = await sessionFor("u2", "502");
+    const editor = await sessionFor("u3", "503");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "read" }, { userId: "u3", access: "edit" });
+    const task = await makeTaskIn(list.id);
 
     expect((await callGet(task.id, activityRequest(task.id, reader.id))).status).toBe(200);
     expect((await callGet(task.id, activityRequest(task.id, editor.id))).status).toBe(200);
   });
 
   it("returns 404 for an unknown task", async () => {
-    const session = sessionFor("u1", "504");
+    const session = await sessionFor("u1", "504");
 
     const response = await callGet("does-not-exist", activityRequest("does-not-exist", session.id));
 
@@ -103,9 +103,9 @@ describe("GET /api/tasks/[id]/activity", () => {
   });
 
   it("returns 404 for another user's private task", async () => {
-    const session = sessionFor("u2", "505");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u2", "505");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callGet(task.id, activityRequest(task.id, session.id));
 
@@ -113,10 +113,10 @@ describe("GET /api/tasks/[id]/activity", () => {
   });
 
   it("returns 404 for a soft-deleted task", async () => {
-    const session = sessionFor("u1", "506");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    insertTasks([{ ...task, deletedAt: "2026-08-01T00:00:00.000Z" }]);
+    const session = await sessionFor("u1", "506");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    await insertTasks([{ ...task, deletedAt: "2026-08-01T00:00:00.000Z" }]);
 
     const response = await callGet(task.id, activityRequest(task.id, session.id));
 
@@ -124,9 +124,9 @@ describe("GET /api/tasks/[id]/activity", () => {
   });
 
   it("ignores a spoofed userId query parameter and uses the session user", async () => {
-    const session = sessionFor("u2", "507");
-    const list = createList("u1", { title: "Private", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u2", "507");
+    const list = await createList("u1", { title: "Private", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callGet(task.id, activityRequest(task.id, session.id, "?userId=u1"));
 

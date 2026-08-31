@@ -13,17 +13,17 @@ export interface CurrentSession {
  * session/user, or null if missing, unknown, or revoked. Used by
  * `requireAuth` to guard protected routes.
  */
-export function getCurrentSession(sessionId: string | null | undefined): CurrentSession | null {
+export async function getCurrentSession(sessionId: string | null | undefined): Promise<CurrentSession | null> {
   if (!sessionId) {
     return null;
   }
 
-  const session = findSessionById(sessionId);
+  const session = await findSessionById(sessionId);
   if (!session || session.revokedAt !== null) {
     return null;
   }
 
-  const user = findUserById(session.userId);
+  const user = await findUserById(session.userId);
   if (!user) {
     return null;
   }

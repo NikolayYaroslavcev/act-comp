@@ -126,7 +126,7 @@ describe("TaskExportActions", () => {
     );
     render(<TaskExportActions task={makeTask()} />);
     await openMenu(user);
-    const click = user.click(screen.getByTestId("task-export-pdf"));
+    const click = await user.click(screen.getByTestId("task-export-pdf"));
     await waitFor(() => expect(screen.getByTestId("task-export-trigger")).toBeDisabled());
     expect(fetch).toHaveBeenCalledTimes(1);
     await user.click(screen.getByTestId("task-export-trigger"));
@@ -209,7 +209,7 @@ describe("TaskExportActions", () => {
     );
     render(<TaskExportActions task={makeTask()} />);
     await openMenu(user);
-    const click = user.click(screen.getByTestId("task-export-xlsx"));
+    const click = await user.click(screen.getByTestId("task-export-xlsx"));
     await waitFor(() => expect(screen.getByTestId("task-export-trigger")).toBeDisabled());
     resolveXlsx(new Response(new Uint8Array([0x50, 0x4b, 0x03, 0x04]), { status: 200 }));
     await click;

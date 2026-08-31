@@ -9,13 +9,13 @@ export type RestoreTaskOutcome =
   | { status: "expired" }
   | { status: "ok"; task: Task };
 
-export function restoreTaskForUser(userId: string, taskId: string, now: Date = new Date()): RestoreTaskOutcome {
-  const task = findTaskById(taskId);
+export async function restoreTaskForUser(userId: string, taskId: string, now: Date = new Date()): Promise<RestoreTaskOutcome> {
+  const task = await findTaskById(taskId);
   if (!task) {
     return { status: "not_found" };
   }
 
-  const list = findListById(task.listId);
+  const list = await findListById(task.listId);
   if (!list || list.deletedAt !== null || !canViewList(list, userId)) {
     return { status: "not_found" };
   }

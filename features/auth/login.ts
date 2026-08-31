@@ -16,13 +16,13 @@ export interface LoginResult {
   session: Session;
 }
 
-export function login(input: LoginInput, meta: LoginMeta): LoginResult | null {
-  const user = findUserByEmail(input.email);
+export async function login(input: LoginInput, meta: LoginMeta): Promise<LoginResult | null> {
+  const user = await findUserByEmail(input.email);
   if (!user || !verifyPassword(user.passwordHash, input.password)) {
     return null;
   }
 
-  const session = createSession({
+  const session = await createSession({
     userId: user.id,
     ip: generateMockIp(),
     device: parseDevice(meta.userAgent),

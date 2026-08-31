@@ -22,18 +22,18 @@ export type GetTaskChangeStatusOutcome = { status: "not_found" } | { status: "ok
 // store. Permission comes from the same getVisibleTask used by GET/PATCH
 // /api/tasks/:id and the activity route, so owner/shared-read/shared-edit/
 // unrelated-user/deleted-task/revoked-access all resolve identically here.
-export function getTaskChangeStatusForUser(
+export async function getTaskChangeStatusForUser(
   userId: string,
   taskId: string,
   sinceIso: string,
-): GetTaskChangeStatusOutcome {
-  const visible = getVisibleTask(userId, taskId);
+): Promise<GetTaskChangeStatusOutcome> {
+  const visible = await getVisibleTask(userId, taskId);
   if (visible.status === "not_found") {
     return { status: "not_found" };
   }
 
   const sinceMs = new Date(sinceIso).getTime();
-  const relevant = listActivityForTask(taskId).filter(
+  const relevant = (await listActivityForTask(taskId)).filter(
     (activity) => activity.byUserId !== userId && new Date(activity.at).getTime() > sinceMs,
   );
 
@@ -54,7 +54,7 @@ export function getTaskChangeStatusForUser(
   }
 
   const latest = relevant[0];
-  const actorEmail = findUserById(latest.byUserId)?.email ?? latest.byUserId;
+  const actorEmail = (await findUserById(latest.byUserId))?.email ?? latest.byUserId;
   const changedFields = [
     ...new Set(relevant.flatMap((activity) => (activity.metadata?.field ? [activity.metadata.field] : []))),
   ];

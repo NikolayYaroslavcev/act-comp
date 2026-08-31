@@ -35,7 +35,7 @@ function cookieJar(sessionId?: string) {
 
 describe("SettingsPage", () => {
   it("renders the current user's settings", async () => {
-    const session = createSession({
+    const session = await createSession({
       userId: "u2",
       ip: "192.0.2.5 (demo)",
       device: "Chrome on Windows",
@@ -47,7 +47,7 @@ describe("SettingsPage", () => {
 
     expect(screen.getByTestId("settings-form")).toHaveAttribute(
       "data-theme",
-      findUserById("u2")!.settings.theme,
+      (await findUserById("u2"))!.settings.theme,
     );
     expect(screen.getByTestId("sessions-section")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Настройки" })).toHaveAttribute("href", "/settings");

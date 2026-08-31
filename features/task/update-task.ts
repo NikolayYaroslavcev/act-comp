@@ -14,13 +14,13 @@ export type UpdateTaskOutcome =
   | { status: "blocked" }
   | { status: "ok"; task: Task; cascade: CascadeUpdate[] };
 
-export function updateTaskForUser(userId: string, taskId: string, input: UpdateTaskInput): UpdateTaskOutcome {
-  const task = findTaskById(taskId);
+export async function updateTaskForUser(userId: string, taskId: string, input: UpdateTaskInput): Promise<UpdateTaskOutcome> {
+  const task = await findTaskById(taskId);
   if (!task || task.deletedAt !== null) {
     return { status: "not_found" };
   }
 
-  const list = findListById(task.listId);
+  const list = await findListById(task.listId);
   if (!list || list.deletedAt !== null || !canViewList(list, userId)) {
     return { status: "not_found" };
   }

@@ -26,7 +26,7 @@ describe("POST /api/auth/login", () => {
     expect(json.data.user.passwordHash).toBeUndefined();
     expect(json.data.session).toBeUndefined();
     expect(sessionId).toBeTruthy();
-    expect(findSessionById(sessionId!)?.userId).toBe(json.data.user.id);
+    expect((await findSessionById(sessionId!))?.userId).toBe(json.data.user.id);
   });
 
   it("returns 401 for a wrong password", async () => {
@@ -59,7 +59,7 @@ describe("POST /api/auth/login", () => {
     );
     const sessionId = response.cookies.get(SESSION_COOKIE_NAME)?.value;
 
-    expect(findSessionById(sessionId!)).toBeDefined();
+    expect(await findSessionById(sessionId!)).toBeDefined();
   });
 
   it("stores the requested rememberMe value on the session", async () => {
@@ -68,7 +68,7 @@ describe("POST /api/auth/login", () => {
     );
     const sessionId = response.cookies.get(SESSION_COOKIE_NAME)?.value;
 
-    expect(findSessionById(sessionId!)?.rememberMe).toBe(true);
+    expect((await findSessionById(sessionId!))?.rememberMe).toBe(true);
   });
 
   it("creates a new session with revokedAt set to null", async () => {
@@ -77,7 +77,7 @@ describe("POST /api/auth/login", () => {
     );
     const sessionId = response.cookies.get(SESSION_COOKIE_NAME)?.value;
 
-    expect(findSessionById(sessionId!)?.revokedAt).toBeNull();
+    expect((await findSessionById(sessionId!))?.revokedAt).toBeNull();
   });
 
   it("determines device from the User-Agent header", async () => {
@@ -89,7 +89,7 @@ describe("POST /api/auth/login", () => {
     );
     const sessionId = response.cookies.get(SESSION_COOKIE_NAME)?.value;
 
-    expect(findSessionById(sessionId!)?.device).toBe("Safari on macOS");
+    expect((await findSessionById(sessionId!))?.device).toBe("Safari on macOS");
   });
 
   it("lets the httpOnly cookie authenticate a subsequent request", async () => {
@@ -98,6 +98,6 @@ describe("POST /api/auth/login", () => {
     );
     const sessionId = response.cookies.get(SESSION_COOKIE_NAME)?.value;
 
-    expect(getCurrentSession(sessionId)).not.toBeNull();
+    expect(await getCurrentSession(sessionId)).not.toBeNull();
   });
 });

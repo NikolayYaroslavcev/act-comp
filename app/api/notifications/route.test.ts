@@ -19,8 +19,8 @@ function notificationsRequest(method: "GET" | "PATCH", sessionId?: string, body?
   });
 }
 
-function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
-  return createSession({
+async function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
+  return await createSession({
     userId,
     ip: `192.0.2.${suffix} (demo)`,
     device: "Chrome on Windows",
@@ -35,20 +35,20 @@ describe("GET /api/notifications", () => {
   });
 
   it("returns 401 for a revoked session", async () => {
-    const session = sessionFor("u1", "70");
-    revokeSession(session.id);
+    const session = await sessionFor("u1", "70");
+    await revokeSession(session.id);
 
     const response = await GET(notificationsRequest("GET", session.id));
     expect(response.status).toBe(401);
   });
 
   it("returns only the current user's due notifications", async () => {
-    const db = getDb();
+    const db = await getDb();
     db.tasks.t8 = { ...db.tasks.t8, timeSpentMin: 23 };
-    saveDb(db);
+    await saveDb(db);
 
-    const ownerSession = sessionFor("u1", "71");
-    const otherSession = sessionFor("u3", "72");
+    const ownerSession = await sessionFor("u1", "71");
+    const otherSession = await sessionFor("u3", "72");
 
     const ownerResponse = await GET(notificationsRequest("GET", ownerSession.id));
     const otherResponse = await GET(notificationsRequest("GET", otherSession.id));
@@ -63,10 +63,10 @@ describe("GET /api/notifications", () => {
   });
 
   it("delivers a workDayHours notification through the full save -> GET -> ack path", async () => {
-    updateUserSettings("u1", { workDayHours: 5 });
+    await updateUserSettings("u1", { workDayHours: 5 });
 
-    const ownerSession = sessionFor("u1", "78");
-    const otherSession = sessionFor("u2", "79");
+    const ownerSession = await sessionFor("u1", "78");
+    const otherSession = await sessionFor("u2", "79");
 
     const ownerResponse = await GET(notificationsRequest("GET", ownerSession.id));
     const ownerJson = await ownerResponse.json();
@@ -95,7 +95,7 @@ describe("PATCH /api/notifications", () => {
   });
 
   it("returns 400 for invalid JSON", async () => {
-    const session = sessionFor("u1", "73");
+    const session = await sessionFor("u1", "73");
     const response = await PATCH(
       new NextRequest("http://localhost/api/notifications", {
         method: "PATCH",
@@ -110,11 +110,11 @@ describe("PATCH /api/notifications", () => {
   });
 
   it("acks currently due keys for the current user only", async () => {
-    const db = getDb();
+    const db = await getDb();
     db.tasks.t8 = { ...db.tasks.t8, timeSpentMin: 23 };
-    saveDb(db);
+    await saveDb(db);
 
-    const session = sessionFor("u1", "74");
+    const session = await sessionFor("u1", "74");
     const key = notificationKey("time_threshold", "t8", 75);
 
     const response = await PATCH(notificationsRequest("PATCH", session.id, { keys: [key] }));
@@ -122,40 +122,40 @@ describe("PATCH /api/notifications", () => {
 
     expect(response.status).toBe(200);
     expect(json.data).toContain(key);
-    expect(listAckedNotificationKeys("u1")).toContain(key);
-    expect(listAckedNotificationKeys("u2")).not.toContain(key);
+    expect(await listAckedNotificationKeys("u1")).toContain(key);
+    expect(await listAckedNotificationKeys("u2")).not.toContain(key);
   });
 
   it("rejects an arbitrary key that is not currently due", async () => {
-    const session = sessionFor("u1", "75");
+    const session = await sessionFor("u1", "75");
     const key = "time_threshold:t-isolated:75";
 
     const response = await PATCH(notificationsRequest("PATCH", session.id, { keys: [key] }));
 
     expect(response.status).toBe(400);
-    expect(listAckedNotificationKeys("u1")).not.toContain(key);
+    expect(await listAckedNotificationKeys("u1")).not.toContain(key);
   });
 
   it("rejects a well-formed key for another user's task", async () => {
-    const db = getDb();
+    const db = await getDb();
     db.tasks.t8 = { ...db.tasks.t8, timeSpentMin: 23 };
-    saveDb(db);
+    await saveDb(db);
 
-    const session = sessionFor("u3", "76");
+    const session = await sessionFor("u3", "76");
     const key = notificationKey("time_threshold", "t8", 75);
 
     const response = await PATCH(notificationsRequest("PATCH", session.id, { keys: [key] }));
 
     expect(response.status).toBe(400);
-    expect(listAckedNotificationKeys("u3")).not.toContain(key);
+    expect(await listAckedNotificationKeys("u3")).not.toContain(key);
   });
 
   it("rejects a malformed notification key", async () => {
-    const session = sessionFor("u1", "77");
+    const session = await sessionFor("u1", "77");
 
     const response = await PATCH(notificationsRequest("PATCH", session.id, { keys: ["not-a-notification"] }));
 
     expect(response.status).toBe(400);
-    expect(listAckedNotificationKeys("u1")).not.toContain("not-a-notification");
+    expect(await listAckedNotificationKeys("u1")).not.toContain("not-a-notification");
   });
 });

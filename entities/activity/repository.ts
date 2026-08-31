@@ -27,25 +27,27 @@ export function appendActivity(db: Database, input: RecordActivityInput): Activi
   return activity;
 }
 
-export function recordActivity(input: RecordActivityInput): Activity {
-  const db = getDb();
+export async function recordActivity(input: RecordActivityInput): Promise<Activity> {
+  const db = await getDb();
   const activity = appendActivity(db, input);
-  saveDb(db);
+  await saveDb(db);
   return activity;
 }
 
-export function listActivity(): Activity[] {
-  return Object.values(getDb().activityLog);
+export async function listActivity(): Promise<Activity[]> {
+  return Object.values((await getDb()).activityLog);
 }
 
-export function listActivityForTask(taskId: string, db: Database = getDb()): Activity[] {
-  return Object.values(db.activityLog)
+export async function listActivityForTask(taskId: string, db?: Database): Promise<Activity[]> {
+  const resolved = db ?? (await getDb());
+  return Object.values(resolved.activityLog)
     .filter((activity) => activity.entityType === "task" && activity.entityId === taskId)
     .sort(compareActivityNewestFirst);
 }
 
-export function listActivityForUser(userId: string, db: Database = getDb()): Activity[] {
-  return Object.values(db.activityLog)
+export async function listActivityForUser(userId: string, db?: Database): Promise<Activity[]> {
+  const resolved = db ?? (await getDb());
+  return Object.values(resolved.activityLog)
     .filter((activity) => activity.entityType === "user" && activity.entityId === userId)
     .sort(compareActivityNewestFirst);
 }

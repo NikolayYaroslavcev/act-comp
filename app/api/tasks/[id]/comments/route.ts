@@ -8,13 +8,13 @@ import { createTaskCommentForUser } from "@/features/comment/create-task-comment
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function GET(request: NextRequest, { params }: RouteContext) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if (!auth.authorized) {
     return jsonError(401, "Unauthorized");
   }
 
   const { id } = await params;
-  const result = listTaskCommentsForUser(auth.user.id, id);
+  const result = await listTaskCommentsForUser(auth.user.id, id);
   if (result.status === "not_found") {
     return jsonError(404, "Task not found");
   }
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 }
 
 export async function POST(request: NextRequest, { params }: RouteContext) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if (!auth.authorized) {
     return jsonError(401, "Unauthorized");
   }
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     return jsonError(400, "Validation failed", parsed.error.issues);
   }
 
-  const result = createTaskCommentForUser(auth.user.id, id, parsed.data);
+  const result = await createTaskCommentForUser(auth.user.id, id, parsed.data);
   switch (result.status) {
     case "not_found":
       return jsonError(404, "Task not found");

@@ -4,30 +4,30 @@ import { createSession, findSessionById } from "@/entities/session/repository";
 import { getCurrentSession } from "@/features/auth/current-session";
 
 describe("logout", () => {
-  it("revokes an active session", () => {
-    const session = createSession({
+  it("revokes an active session", async () => {
+    const session = await createSession({
       userId: "u1",
       ip: "192.0.2.10 (demo)",
       device: "Chrome on Windows",
       rememberMe: false,
     });
 
-    logout(session.id);
+    await logout(session.id);
 
-    expect(findSessionById(session.id)?.revokedAt).toBeTruthy();
+    expect((await findSessionById(session.id))?.revokedAt).toBeTruthy();
   });
 
-  it("makes getCurrentSession stop treating the session as active", () => {
-    const session = createSession({
+  it("makes getCurrentSession stop treating the session as active", async () => {
+    const session = await createSession({
       userId: "u1",
       ip: "192.0.2.11 (demo)",
       device: "Chrome on Windows",
       rememberMe: false,
     });
 
-    logout(session.id);
+    await logout(session.id);
 
-    expect(getCurrentSession(session.id)).toBeNull();
+    expect(await getCurrentSession(session.id)).toBeNull();
   });
 
   it("does nothing when sessionId is null", () => {
@@ -42,19 +42,19 @@ describe("logout", () => {
     expect(() => logout("does-not-exist")).not.toThrow();
   });
 
-  it("is idempotent for an already revoked session", () => {
-    const session = createSession({
+  it("is idempotent for an already revoked session", async () => {
+    const session = await createSession({
       userId: "u1",
       ip: "192.0.2.12 (demo)",
       device: "Chrome on Windows",
       rememberMe: false,
     });
 
-    logout(session.id);
-    const revokedAtAfterFirstLogout = findSessionById(session.id)?.revokedAt;
+    await logout(session.id);
+    const revokedAtAfterFirstLogout = (await findSessionById(session.id))?.revokedAt;
 
-    logout(session.id);
+    await logout(session.id);
 
-    expect(findSessionById(session.id)?.revokedAt).toBe(revokedAtAfterFirstLogout);
+    expect((await findSessionById(session.id))?.revokedAt).toBe(revokedAtAfterFirstLogout);
   });
 });

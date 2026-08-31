@@ -11,18 +11,18 @@ export type ControlTaskTimerOutcome =
   | { status: "invalid_transition" }
   | { status: "ok"; task: Task };
 
-export function controlTaskTimerForUser(
+export async function controlTaskTimerForUser(
   userId: string,
   taskId: string,
   action: TimerAction,
   now: Date = new Date(),
-): ControlTaskTimerOutcome {
-  const task = findTaskById(taskId);
+): Promise<ControlTaskTimerOutcome> {
+  const task = await findTaskById(taskId);
   if (!task || task.deletedAt !== null) {
     return { status: "not_found" };
   }
 
-  const list = findListById(task.listId);
+  const list = await findListById(task.listId);
   if (!list || list.deletedAt !== null || !canViewList(list, userId)) {
     return { status: "not_found" };
   }
@@ -31,7 +31,7 @@ export function controlTaskTimerForUser(
     return { status: "forbidden" };
   }
 
-  const result = applyTaskTimer(taskId, userId, action, now);
+  const result = await applyTaskTimer(taskId, userId, action, now);
   if (result.status === "deleted" || result.status === "not_found") {
     return { status: "not_found" };
   }

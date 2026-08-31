@@ -7,7 +7,7 @@ import { getTaskChangeStatusForUser } from "@/features/task/get-task-change-stat
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function GET(request: NextRequest, { params }: RouteContext) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if (!auth.authorized) {
     return jsonError(401, "Unauthorized");
   }
@@ -18,7 +18,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
   }
 
   const { id } = await params;
-  const result = getTaskChangeStatusForUser(auth.user.id, id, since.data);
+  const result = await getTaskChangeStatusForUser(auth.user.id, id, since.data);
   if (result.status === "not_found") {
     return jsonError(404, "Task not found");
   }

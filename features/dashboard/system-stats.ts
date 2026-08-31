@@ -6,9 +6,9 @@ export interface SystemStats {
   totalTasks: number;
 }
 
-export function getSystemStats(): SystemStats {
+export async function getSystemStats(): Promise<SystemStats> {
   return {
-    totalUsers: countUsers(),
-    totalTasks: countTasks(),
+    totalUsers: await countUsers(),
+    totalTasks: await countTasks(),
   };
 }

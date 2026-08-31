@@ -71,7 +71,7 @@ describe("TaskTimer", () => {
     expect(screen.getByTestId("task-timer-state")).toHaveTextContent("Идёт");
     expect(screen.getByTestId("task-timer-elapsed")).toHaveTextContent("0:00:00");
 
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(1000);
     });
 
@@ -232,7 +232,7 @@ describe("TaskTimer", () => {
 
     expect(screen.getByTestId("task-timer-remaining")).toHaveTextContent("1:00:00");
 
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(60_000);
     });
 

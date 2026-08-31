@@ -32,19 +32,19 @@ function createCommentRequestWithRawBody(taskId: string, sessionId: string, rawB
   });
 }
 
-function callGet(taskId: string, request: NextRequest) {
-  return GET(request, { params: Promise.resolve({ id: taskId }) });
+async function callGet(taskId: string, request: NextRequest) {
+  return await GET(request, { params: Promise.resolve({ id: taskId }) });
 }
 
-function callPost(taskId: string, request: NextRequest) {
-  return POST(request, { params: Promise.resolve({ id: taskId }) });
+async function callPost(taskId: string, request: NextRequest) {
+  return await POST(request, { params: Promise.resolve({ id: taskId }) });
 }
 
 // The seed data only defines users u1/u2/u3 (see data.json) — requireAuth
 // resolves a session to a real user, so tests must reuse those ids rather
 // than inventing arbitrary owner ids.
-function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
-  return createSession({
+async function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
+  return await createSession({
     userId,
     ip: `192.0.2.${suffix} (demo)`,
     device: "Chrome on Windows",
@@ -52,8 +52,8 @@ function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
   });
 }
 
-function makeTaskIn(listId: string) {
-  return createTask({
+async function makeTaskIn(listId: string) {
+  return await createTask({
     listId,
     title: "Task",
     description: "",
@@ -68,8 +68,8 @@ function makeTaskIn(listId: string) {
 
 describe("GET /api/tasks/[id]/comments", () => {
   it("returns 401 when no session cookie is present", async () => {
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callGet(task.id, commentsRequest(task.id, undefined));
 
@@ -77,10 +77,10 @@ describe("GET /api/tasks/[id]/comments", () => {
   });
 
   it("returns 200 with the task's comments for its owner", async () => {
-    const session = sessionFor("u1", "300");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    const comment = createComment({ taskId: task.id, authorId: "u1", text: "Hello" });
+    const session = await sessionFor("u1", "300");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    const comment = await createComment({ taskId: task.id, authorId: "u1", text: "Hello" });
 
     const response = await callGet(task.id, commentsRequest(task.id, session.id));
 
@@ -92,7 +92,7 @@ describe("GET /api/tasks/[id]/comments", () => {
   });
 
   it("returns 404 for an unknown task id", async () => {
-    const session = sessionFor("u1", "301");
+    const session = await sessionFor("u1", "301");
 
     const response = await callGet("does-not-exist", commentsRequest("does-not-exist", session.id));
 
@@ -100,9 +100,9 @@ describe("GET /api/tasks/[id]/comments", () => {
   });
 
   it("returns 404 for a task inaccessible to the user (not a leaking 403)", async () => {
-    const session = sessionFor("u2", "302");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u2", "302");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callGet(task.id, commentsRequest(task.id, session.id));
 
@@ -112,8 +112,8 @@ describe("GET /api/tasks/[id]/comments", () => {
 
 describe("POST /api/tasks/[id]/comments", () => {
   it("returns 401 when no session cookie is present", async () => {
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPost(task.id, createCommentRequest(task.id, undefined, { text: "Hi" }));
 
@@ -121,9 +121,9 @@ describe("POST /api/tasks/[id]/comments", () => {
   });
 
   it("creates a comment for the task's owner and returns 201", async () => {
-    const session = sessionFor("u1", "310");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "310");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPost(task.id, createCommentRequest(task.id, session.id, { text: "Hello" }));
 
@@ -132,23 +132,23 @@ describe("POST /api/tasks/[id]/comments", () => {
     expect(json.data.text).toBe("Hello");
     expect(json.data.authorId).toBe("u1");
     expect(json.data.taskId).toBe(task.id);
-    expect(listCommentsForTask(task.id)).toHaveLength(1);
+    expect(await listCommentsForTask(task.id)).toHaveLength(1);
   });
 
   it("returns 403 for a read-only shared user, without creating a comment", async () => {
-    const session = sessionFor("u2", "311");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "read" });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u2", "311");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "read" });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPost(task.id, createCommentRequest(task.id, session.id, { text: "Hi" }));
 
     expect(response.status).toBe(403);
-    expect(listCommentsForTask(task.id)).toEqual([]);
+    expect(await listCommentsForTask(task.id)).toEqual([]);
   });
 
   it("returns 404 for an unknown task id", async () => {
-    const session = sessionFor("u1", "312");
+    const session = await sessionFor("u1", "312");
 
     const response = await callPost(
       "does-not-exist",
@@ -159,9 +159,9 @@ describe("POST /api/tasks/[id]/comments", () => {
   });
 
   it("returns 400 for invalid JSON", async () => {
-    const session = sessionFor("u1", "313");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "313");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPost(task.id, createCommentRequestWithRawBody(task.id, session.id, "{ not json"));
 
@@ -169,9 +169,9 @@ describe("POST /api/tasks/[id]/comments", () => {
   });
 
   it("returns 400 for an empty text", async () => {
-    const session = sessionFor("u1", "314");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "314");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPost(task.id, createCommentRequest(task.id, session.id, { text: "" }));
 
@@ -181,9 +181,9 @@ describe("POST /api/tasks/[id]/comments", () => {
   });
 
   it("returns 400 for a missing text field", async () => {
-    const session = sessionFor("u1", "315");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "315");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPost(task.id, createCommentRequest(task.id, session.id, {}));
 
@@ -191,11 +191,11 @@ describe("POST /api/tasks/[id]/comments", () => {
   });
 
   it("ignores client-supplied server-owned fields (authorId, taskId, id, createdAt)", async () => {
-    const session = sessionFor("u2", "316");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "edit" });
-    const task = makeTaskIn(list.id);
-    const otherTask = makeTaskIn(list.id);
+    const session = await sessionFor("u2", "316");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "edit" });
+    const task = await makeTaskIn(list.id);
+    const otherTask = await makeTaskIn(list.id);
 
     const response = await callPost(
       task.id,
@@ -217,9 +217,9 @@ describe("POST /api/tasks/[id]/comments", () => {
   });
 
   it("returns 404 for a task whose list is inaccessible to the user (not a leaking 403)", async () => {
-    const session = sessionFor("u2", "317");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u2", "317");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPost(task.id, createCommentRequest(task.id, session.id, { text: "Hi" }));
 
@@ -227,10 +227,10 @@ describe("POST /api/tasks/[id]/comments", () => {
   });
 
   it("returns 404 for a soft-deleted task", async () => {
-    const session = sessionFor("u1", "318");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    insertTasks([{ ...task, deletedAt: "2026-08-01T00:00:00.000Z" }]);
+    const session = await sessionFor("u1", "318");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    await insertTasks([{ ...task, deletedAt: "2026-08-01T00:00:00.000Z" }]);
 
     const response = await callPost(task.id, createCommentRequest(task.id, session.id, { text: "Hi" }));
 

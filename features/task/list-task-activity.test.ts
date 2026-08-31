@@ -4,8 +4,8 @@ import { createList, findListById } from "@/entities/list/repository";
 import { createTask, insertTasks, updateTask } from "@/entities/task/repository";
 import { recordActivity } from "@/entities/activity/repository";
 
-function makeTaskIn(listId: string) {
-  return createTask({
+async function makeTaskIn(listId: string) {
+  return await createTask({
     listId,
     title: "Task",
     description: "",
@@ -19,12 +19,12 @@ function makeTaskIn(listId: string) {
 }
 
 describe("listTaskActivityForUser", () => {
-  it("returns activity for the owner, with actor email resolved", () => {
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    updateTask(task.id, "u1", { priority: 5 });
+  it("returns activity for the owner, with actor email resolved", async () => {
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    await updateTask(task.id, "u1", { priority: 5 });
 
-    const result = listTaskActivityForUser("u1", task.id);
+    const result = await listTaskActivityForUser("u1", task.id);
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
@@ -34,11 +34,11 @@ describe("listTaskActivityForUser", () => {
     }
   });
 
-  it("returns activity for shared-read and shared-edit", () => {
-    const list = createList("u1", { title: "Shared", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "read" }, { userId: "u3", access: "edit" });
-    const task = makeTaskIn(list.id);
-    recordActivity({
+  it("returns activity for shared-read and shared-edit", async () => {
+    const list = await createList("u1", { title: "Shared", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "read" }, { userId: "u3", access: "edit" });
+    const task = await makeTaskIn(list.id);
+    await recordActivity({
       entityType: "task",
       entityId: task.id,
       action: "created",
@@ -46,34 +46,34 @@ describe("listTaskActivityForUser", () => {
       byUserId: "u1",
     });
 
-    expect(listTaskActivityForUser("u2", task.id).status).toBe("ok");
-    expect(listTaskActivityForUser("u3", task.id).status).toBe("ok");
+    expect((await listTaskActivityForUser("u2", task.id)).status).toBe("ok");
+    expect((await listTaskActivityForUser("u3", task.id)).status).toBe("ok");
   });
 
-  it("returns not_found for a private task of another user", () => {
-    const list = createList("u1", { title: "Private", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+  it("returns not_found for a private task of another user", async () => {
+    const list = await createList("u1", { title: "Private", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
-    expect(listTaskActivityForUser("u2", task.id)).toEqual({ status: "not_found" });
+    expect(await listTaskActivityForUser("u2", task.id)).toEqual({ status: "not_found" });
   });
 
-  it("returns not_found for an unknown task", () => {
-    expect(listTaskActivityForUser("u1", "does-not-exist")).toEqual({ status: "not_found" });
+  it("returns not_found for an unknown task", async () => {
+    expect(await listTaskActivityForUser("u1", "does-not-exist")).toEqual({ status: "not_found" });
   });
 
-  it("returns not_found for a soft-deleted task", () => {
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    insertTasks([{ ...task, deletedAt: "2026-08-01T00:00:00.000Z" }]);
+  it("returns not_found for a soft-deleted task", async () => {
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    await insertTasks([{ ...task, deletedAt: "2026-08-01T00:00:00.000Z" }]);
 
-    expect(listTaskActivityForUser("u1", task.id)).toEqual({ status: "not_found" });
+    expect(await listTaskActivityForUser("u1", task.id)).toEqual({ status: "not_found" });
   });
 
-  it("does not return another task's activity", () => {
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    const other = makeTaskIn(list.id);
-    recordActivity({
+  it("does not return another task's activity", async () => {
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    const other = await makeTaskIn(list.id);
+    await recordActivity({
       entityType: "task",
       entityId: other.id,
       action: "created",
@@ -81,7 +81,7 @@ describe("listTaskActivityForUser", () => {
       byUserId: "u1",
     });
 
-    const result = listTaskActivityForUser("u1", task.id);
+    const result = await listTaskActivityForUser("u1", task.id);
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
       expect(result.activity.every((item) => item.entityId === task.id)).toBe(true);

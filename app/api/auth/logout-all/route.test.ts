@@ -39,7 +39,7 @@ describe("POST /api/auth/logout-all", () => {
 
   it("revokes all active sessions of the current user", async () => {
     const { sessionId, userId } = await loginAndGetSession();
-    const otherOwnSession = createSession({
+    const otherOwnSession = await createSession({
       userId,
       ip: "192.0.2.20 (demo)",
       device: "Firefox on Linux",
@@ -48,29 +48,29 @@ describe("POST /api/auth/logout-all", () => {
 
     await logoutAll(logoutAllRequest(sessionId));
 
-    expect(findSessionById(sessionId)?.revokedAt).toBeTruthy();
-    expect(findSessionById(otherOwnSession.id)?.revokedAt).toBeTruthy();
+    expect((await findSessionById(sessionId))?.revokedAt).toBeTruthy();
+    expect((await findSessionById(otherOwnSession.id))?.revokedAt).toBeTruthy();
   });
 
   it("does not change an already revoked session of the same user", async () => {
     const { sessionId, userId } = await loginAndGetSession();
-    const alreadyRevokedSession = createSession({
+    const alreadyRevokedSession = await createSession({
       userId,
       ip: "192.0.2.21 (demo)",
       device: "Firefox on Linux",
       rememberMe: false,
     });
     await logoutAll(logoutAllRequest(alreadyRevokedSession.id));
-    const revokedAtBefore = findSessionById(alreadyRevokedSession.id)?.revokedAt;
+    const revokedAtBefore = (await findSessionById(alreadyRevokedSession.id))?.revokedAt;
 
     await logoutAll(logoutAllRequest(sessionId));
 
-    expect(findSessionById(alreadyRevokedSession.id)?.revokedAt).toBe(revokedAtBefore);
+    expect((await findSessionById(alreadyRevokedSession.id))?.revokedAt).toBe(revokedAtBefore);
   });
 
   it("does not affect sessions of other users", async () => {
     const { sessionId } = await loginAndGetSession();
-    const otherUserSession = createSession({
+    const otherUserSession = await createSession({
       userId: "some-other-user",
       ip: "192.0.2.22 (demo)",
       device: "Chrome on Windows",
@@ -79,7 +79,7 @@ describe("POST /api/auth/logout-all", () => {
 
     await logoutAll(logoutAllRequest(sessionId));
 
-    expect(findSessionById(otherUserSession.id)?.revokedAt).toBeNull();
+    expect((await findSessionById(otherUserSession.id))?.revokedAt).toBeNull();
   });
 
   it("clears the session_id cookie on the response", async () => {
@@ -96,12 +96,12 @@ describe("POST /api/auth/logout-all", () => {
 
     await logoutAll(logoutAllRequest(sessionId));
 
-    expect(getCurrentSession(sessionId)).toBeNull();
+    expect(await getCurrentSession(sessionId)).toBeNull();
   });
 
   it("makes another active session of the same user inactive", async () => {
     const { sessionId, userId } = await loginAndGetSession();
-    const otherOwnSession = createSession({
+    const otherOwnSession = await createSession({
       userId,
       ip: "192.0.2.23 (demo)",
       device: "Firefox on Linux",
@@ -110,12 +110,12 @@ describe("POST /api/auth/logout-all", () => {
 
     await logoutAll(logoutAllRequest(sessionId));
 
-    expect(getCurrentSession(otherOwnSession.id)).toBeNull();
+    expect(await getCurrentSession(otherOwnSession.id)).toBeNull();
   });
 
   it("ignores a spoofed userId in the body and only revokes the current user's sessions", async () => {
     const { sessionId } = await loginAndGetSession();
-    const otherUserSession = createSession({
+    const otherUserSession = await createSession({
       userId: "spoofed-user-id",
       ip: "192.0.2.24 (demo)",
       device: "Chrome on Windows",
@@ -134,7 +134,7 @@ describe("POST /api/auth/logout-all", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(findSessionById(otherUserSession.id)?.revokedAt).toBeNull();
+    expect((await findSessionById(otherUserSession.id))?.revokedAt).toBeNull();
   });
 
   it("returns 401 when no cookie is present", async () => {

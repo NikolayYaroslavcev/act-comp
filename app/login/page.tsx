@@ -18,7 +18,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const cookieStore = await cookies();
   const sessionId = cookieStore.get(SESSION_COOKIE_NAME)?.value;
 
-  if (getCurrentSession(sessionId)) {
+  if (await getCurrentSession(sessionId)) {
     redirect(redirectTo);
   }
 

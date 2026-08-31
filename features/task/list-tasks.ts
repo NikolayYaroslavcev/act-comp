@@ -4,7 +4,7 @@ import { listTasks } from "@/entities/task/repository";
 import { selectVisibleTasks } from "@/entities/task/model";
 import type { Task } from "@/entities/task/schema";
 
-export function listVisibleTasks(userId: string, listId?: string): Task[] {
-  const visibleListIds = new Set(selectVisibleLists(listLists(), userId).map((list) => list.id));
-  return selectVisibleTasks(listTasks(listId), visibleListIds);
+export async function listVisibleTasks(userId: string, listId?: string): Promise<Task[]> {
+  const visibleListIds = new Set(selectVisibleLists(await listLists(), userId).map((list) => list.id));
+  return selectVisibleTasks(await listTasks(listId), visibleListIds);
 }

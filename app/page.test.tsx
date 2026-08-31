@@ -53,7 +53,7 @@ describe("Home (root page) — anonymous visitor", () => {
 
 describe("Home (root page) — authenticated visitor", () => {
   it("redirects to /dashboard instead of rendering the welcome screen", async () => {
-    const session = createSession({
+    const session = await createSession({
       userId: "u1",
       ip: "192.0.2.5 (demo)",
       device: "Chrome on Windows",

@@ -12,21 +12,21 @@ function requestFor(pathname: string, sessionId?: string) {
 }
 
 describe("proxy", () => {
-  it("lets the request through for an active session", () => {
-    const session = createSession({
+  it("lets the request through for an active session", async () => {
+    const session = await createSession({
       userId: "u1",
       ip: "192.0.2.5 (demo)",
       device: "Chrome on Windows",
       rememberMe: false,
     });
 
-    const response = proxy(requestFor("/dashboard", session.id));
+    const response = await proxy(requestFor("/dashboard", session.id));
 
     expect(getRedirectUrl(response)).toBeNull();
   });
 
-  it("redirects to /login when no session cookie is present", () => {
-    const response = proxy(requestFor("/dashboard"));
+  it("redirects to /login when no session cookie is present", async () => {
+    const response = await proxy(requestFor("/dashboard"));
 
     const location = getRedirectUrl(response);
     expect(location).not.toBeNull();
@@ -35,24 +35,24 @@ describe("proxy", () => {
     expect(url.searchParams.get("redirect")).toBe("/dashboard");
   });
 
-  it("redirects to /login for an unknown session id", () => {
-    const response = proxy(requestFor("/dashboard", "does-not-exist"));
+  it("redirects to /login for an unknown session id", async () => {
+    const response = await proxy(requestFor("/dashboard", "does-not-exist"));
 
     const url = new URL(getRedirectUrl(response)!);
     expect(url.pathname).toBe("/login");
     expect(url.searchParams.get("redirect")).toBe("/dashboard");
   });
 
-  it("redirects to /login for a revoked session", () => {
-    const session = createSession({
+  it("redirects to /login for a revoked session", async () => {
+    const session = await createSession({
       userId: "u1",
       ip: "192.0.2.5 (demo)",
       device: "Chrome on Windows",
       rememberMe: false,
     });
-    revokeSession(session.id);
+    await revokeSession(session.id);
 
-    const response = proxy(requestFor("/dashboard", session.id));
+    const response = await proxy(requestFor("/dashboard", session.id));
 
     expect(new URL(getRedirectUrl(response)!).pathname).toBe("/login");
   });

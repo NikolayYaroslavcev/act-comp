@@ -7,7 +7,7 @@ import { rollbackTaskForUser } from "@/features/task/rollback-task";
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function POST(request: NextRequest, { params }: RouteContext) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if (!auth.authorized) {
     return jsonError(401, "Unauthorized");
   }
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     return jsonError(400, "Validation failed", parsed.error.issues);
   }
 
-  const result = rollbackTaskForUser(auth.user.id, id, parsed.data.historyIndex);
+  const result = await rollbackTaskForUser(auth.user.id, id, parsed.data.historyIndex);
   switch (result.status) {
     case "not_found":
       return jsonError(404, "Task not found");

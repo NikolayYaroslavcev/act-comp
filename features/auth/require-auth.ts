@@ -8,9 +8,9 @@ export type AuthResult =
   | { authorized: true; session: Session; user: PublicUser }
   | { authorized: false };
 
-export function requireAuth(request: NextRequest): AuthResult {
+export async function requireAuth(request: NextRequest): Promise<AuthResult> {
   const sessionId = request.cookies.get(SESSION_COOKIE_NAME)?.value;
-  const current = getCurrentSession(sessionId);
+  const current = await getCurrentSession(sessionId);
 
   if (!current) {
     return { authorized: false };

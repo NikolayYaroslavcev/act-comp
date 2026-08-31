@@ -13,15 +13,15 @@ function cloneRequest(id: string, sessionId: string | undefined) {
   });
 }
 
-function callClone(id: string, request: NextRequest) {
-  return POST(request, { params: Promise.resolve({ id }) });
+async function callClone(id: string, request: NextRequest) {
+  return await POST(request, { params: Promise.resolve({ id }) });
 }
 
 // The seed data only defines users u1/u2/u3 (see data.json) — requireAuth
 // resolves a session to a real user, so tests must reuse those ids rather
 // than inventing arbitrary owner ids.
-function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
-  return createSession({
+async function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
+  return await createSession({
     userId,
     ip: `192.0.2.${suffix} (demo)`,
     device: "Chrome on Windows",
@@ -29,8 +29,8 @@ function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
   });
 }
 
-function makeTaskIn(listId: string) {
-  return createTask({
+async function makeTaskIn(listId: string) {
+  return await createTask({
     listId,
     title: "Task",
     description: "",
@@ -45,8 +45,8 @@ function makeTaskIn(listId: string) {
 
 describe("POST /api/tasks/[id]/clone", () => {
   it("returns 401 when no session cookie is present", async () => {
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callClone(task.id, cloneRequest(task.id, undefined));
 
@@ -54,7 +54,7 @@ describe("POST /api/tasks/[id]/clone", () => {
   });
 
   it("returns 404 for an unknown task id", async () => {
-    const session = sessionFor("u1", "300");
+    const session = await sessionFor("u1", "300");
 
     const response = await callClone("does-not-exist", cloneRequest("does-not-exist", session.id));
 
@@ -62,9 +62,9 @@ describe("POST /api/tasks/[id]/clone", () => {
   });
 
   it("returns 404 (not a leaking 403) for a stranger with no access at all", async () => {
-    const stranger = sessionFor("u2", "301");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const stranger = await sessionFor("u2", "301");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callClone(task.id, cloneRequest(task.id, stranger.id));
 
@@ -72,21 +72,21 @@ describe("POST /api/tasks/[id]/clone", () => {
   });
 
   it("returns 403 for a shared read-access user, without cloning", async () => {
-    const viewer = sessionFor("u2", "302");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "read" });
-    const task = makeTaskIn(list.id);
+    const viewer = await sessionFor("u2", "302");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "read" });
+    const task = await makeTaskIn(list.id);
 
     const response = await callClone(task.id, cloneRequest(task.id, viewer.id));
 
     expect(response.status).toBe(403);
-    expect(findListById(list.id)!.taskIds).toEqual([task.id]);
+    expect((await findListById(list.id))!.taskIds).toEqual([task.id]);
   });
 
   it("returns 201 with a new task for the owner", async () => {
-    const session = sessionFor("u1", "303");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "303");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callClone(task.id, cloneRequest(task.id, session.id));
 
@@ -97,10 +97,10 @@ describe("POST /api/tasks/[id]/clone", () => {
   });
 
   it("returns 201 for a shared edit-access user", async () => {
-    const editor = sessionFor("u2", "304");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "edit" });
-    const task = makeTaskIn(list.id);
+    const editor = await sessionFor("u2", "304");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "edit" });
+    const task = await makeTaskIn(list.id);
 
     const response = await callClone(task.id, cloneRequest(task.id, editor.id));
 
@@ -108,9 +108,9 @@ describe("POST /api/tasks/[id]/clone", () => {
   });
 
   it("assigns the clone a different code than the source", async () => {
-    const session = sessionFor("u1", "305");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "305");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callClone(task.id, cloneRequest(task.id, session.id));
 
@@ -119,20 +119,20 @@ describe("POST /api/tasks/[id]/clone", () => {
   });
 
   it("does not modify the original task", async () => {
-    const session = sessionFor("u1", "306");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    const snapshot = { ...findTaskById(task.id)! };
+    const session = await sessionFor("u1", "306");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    const snapshot = { ...(await findTaskById(task.id))! };
 
     await callClone(task.id, cloneRequest(task.id, session.id));
 
-    expect(findTaskById(task.id)).toEqual(snapshot);
+    expect(await findTaskById(task.id)).toEqual(snapshot);
   });
 
   it("creates another new task with a different id on a repeated call", async () => {
-    const session = sessionFor("u1", "307");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "307");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const first = await callClone(task.id, cloneRequest(task.id, session.id));
     const second = await callClone(task.id, cloneRequest(task.id, session.id));
@@ -143,10 +143,10 @@ describe("POST /api/tasks/[id]/clone", () => {
   });
 
   it("returns 404 for a soft-deleted source task", async () => {
-    const session = sessionFor("u1", "308");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    insertTasks([{ ...task, deletedAt: new Date().toISOString() }]);
+    const session = await sessionFor("u1", "308");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    await insertTasks([{ ...task, deletedAt: new Date().toISOString() }]);
 
     const response = await callClone(task.id, cloneRequest(task.id, session.id));
 
@@ -154,10 +154,10 @@ describe("POST /api/tasks/[id]/clone", () => {
   });
 
   it("returns 404 when the parent list is soft-deleted, even for its owner", async () => {
-    const session = sessionFor("u1", "309");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    findListById(list.id)!.deletedAt = new Date().toISOString();
+    const session = await sessionFor("u1", "309");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    (await findListById(list.id))!.deletedAt = new Date().toISOString();
 
     const response = await callClone(task.id, cloneRequest(task.id, session.id));
 
@@ -165,12 +165,12 @@ describe("POST /api/tasks/[id]/clone", () => {
   });
 
   it("resets runtime timer state on the clone", async () => {
-    const session = sessionFor("u1", "310");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    insertTasks([
+    const session = await sessionFor("u1", "310");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    await insertTasks([
       {
-        ...findTaskById(task.id)!,
+        ...(await findTaskById(task.id))!,
         timeSpentMin: 45,
         timerStartedAt: "2026-08-27T10:00:00.000Z",
       },
@@ -184,9 +184,9 @@ describe("POST /api/tasks/[id]/clone", () => {
   });
 
   it("resets history on the clone", async () => {
-    const session = sessionFor("u1", "311");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "311");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callClone(task.id, cloneRequest(task.id, session.id));
 

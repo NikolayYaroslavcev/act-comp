@@ -12,8 +12,8 @@ function getRequest(id: string, sessionId: string | undefined) {
   });
 }
 
-function callGet(id: string, request: NextRequest) {
-  return GET(request, { params: Promise.resolve({ id }) });
+async function callGet(id: string, request: NextRequest) {
+  return await GET(request, { params: Promise.resolve({ id }) });
 }
 
 function patchRequest(id: string, sessionId: string | undefined, body: unknown) {
@@ -35,8 +35,8 @@ function patchRequestWithRawBody(id: string, sessionId: string, rawBody: string)
   });
 }
 
-function callPatch(id: string, request: NextRequest) {
-  return PATCH(request, { params: Promise.resolve({ id }) });
+async function callPatch(id: string, request: NextRequest) {
+  return await PATCH(request, { params: Promise.resolve({ id }) });
 }
 
 function deleteRequest(id: string, sessionId: string | undefined) {
@@ -46,15 +46,15 @@ function deleteRequest(id: string, sessionId: string | undefined) {
   });
 }
 
-function callDelete(id: string, request: NextRequest) {
-  return DELETE(request, { params: Promise.resolve({ id }) });
+async function callDelete(id: string, request: NextRequest) {
+  return await DELETE(request, { params: Promise.resolve({ id }) });
 }
 
 // The seed data only defines users u1/u2/u3 (see data.json) — requireAuth
 // resolves a session to a real user, so tests must reuse those ids rather
 // than inventing arbitrary owner ids.
-function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
-  return createSession({
+async function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
+  return await createSession({
     userId,
     ip: `192.0.2.${suffix} (demo)`,
     device: "Chrome on Windows",
@@ -62,8 +62,8 @@ function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
   });
 }
 
-function makeTaskIn(listId: string) {
-  return createTask({
+async function makeTaskIn(listId: string) {
+  return await createTask({
     listId,
     title: "Task",
     description: "",
@@ -78,8 +78,8 @@ function makeTaskIn(listId: string) {
 
 describe("GET /api/tasks/[id]", () => {
   it("returns 401 when no session cookie is present", async () => {
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callGet(task.id, getRequest(task.id, undefined));
 
@@ -87,9 +87,9 @@ describe("GET /api/tasks/[id]", () => {
   });
 
   it("returns 200 with the task for its owner", async () => {
-    const session = sessionFor("u1", "90");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "90");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callGet(task.id, getRequest(task.id, session.id));
 
@@ -99,10 +99,10 @@ describe("GET /api/tasks/[id]", () => {
   });
 
   it("returns 200 with the task for a user it is shared with", async () => {
-    const session = sessionFor("u2", "91");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "read" });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u2", "91");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "read" });
+    const task = await makeTaskIn(list.id);
 
     const response = await callGet(task.id, getRequest(task.id, session.id));
 
@@ -110,7 +110,7 @@ describe("GET /api/tasks/[id]", () => {
   });
 
   it("returns 404 for an unknown task id", async () => {
-    const session = sessionFor("u1", "92");
+    const session = await sessionFor("u1", "92");
 
     const response = await callGet("does-not-exist", getRequest("does-not-exist", session.id));
 
@@ -118,9 +118,9 @@ describe("GET /api/tasks/[id]", () => {
   });
 
   it("returns 404 (not a leaking 403) for another user's task", async () => {
-    const session = sessionFor("u2", "93");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u2", "93");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callGet(task.id, getRequest(task.id, session.id));
 
@@ -128,10 +128,10 @@ describe("GET /api/tasks/[id]", () => {
   });
 
   it("returns 404 for a soft-deleted task", async () => {
-    const session = sessionFor("u1", "94");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    insertTasks([{ ...task, deletedAt: "2026-08-01T00:00:00.000Z" }]);
+    const session = await sessionFor("u1", "94");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    await insertTasks([{ ...task, deletedAt: "2026-08-01T00:00:00.000Z" }]);
 
     const response = await callGet(task.id, getRequest(task.id, session.id));
 
@@ -141,8 +141,8 @@ describe("GET /api/tasks/[id]", () => {
 
 describe("PATCH /api/tasks/[id]", () => {
   it("returns 401 when no session cookie is present", async () => {
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPatch(task.id, patchRequest(task.id, undefined, { title: "Updated" }));
 
@@ -150,8 +150,8 @@ describe("PATCH /api/tasks/[id]", () => {
   });
 
   it("returns 401 for an unknown session id", async () => {
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPatch(task.id, patchRequest(task.id, "does-not-exist", { title: "Updated" }));
 
@@ -159,10 +159,10 @@ describe("PATCH /api/tasks/[id]", () => {
   });
 
   it("returns 401 for a revoked session", async () => {
-    const session = sessionFor("u1", "100");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    revokeSession(session.id);
+    const session = await sessionFor("u1", "100");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    await revokeSession(session.id);
 
     const response = await callPatch(task.id, patchRequest(task.id, session.id, { title: "Updated" }));
 
@@ -170,9 +170,9 @@ describe("PATCH /api/tasks/[id]", () => {
   });
 
   it("allows the owner to update the task", async () => {
-    const session = sessionFor("u1", "101");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "101");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPatch(task.id, patchRequest(task.id, session.id, { title: "Updated" }));
 
@@ -182,10 +182,10 @@ describe("PATCH /api/tasks/[id]", () => {
   });
 
   it("allows a shared edit-access user to update the task", async () => {
-    const session = sessionFor("u2", "102");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "edit" });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u2", "102");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "edit" });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPatch(task.id, patchRequest(task.id, session.id, { title: "Updated" }));
 
@@ -193,21 +193,21 @@ describe("PATCH /api/tasks/[id]", () => {
   });
 
   it("returns 403 for a shared read-access user", async () => {
-    const session = sessionFor("u2", "103");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "read" });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u2", "103");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "read" });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPatch(task.id, patchRequest(task.id, session.id, { title: "Updated" }));
 
     expect(response.status).toBe(403);
-    expect(findTaskById(task.id)!.title).toBe("Task");
+    expect((await findTaskById(task.id))!.title).toBe("Task");
   });
 
   it("returns 404 (not a leaking 403) for a user with no access at all", async () => {
-    const session = sessionFor("u2", "104");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u2", "104");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPatch(task.id, patchRequest(task.id, session.id, { title: "Updated" }));
 
@@ -215,7 +215,7 @@ describe("PATCH /api/tasks/[id]", () => {
   });
 
   it("returns 404 for an unknown task id", async () => {
-    const session = sessionFor("u1", "105");
+    const session = await sessionFor("u1", "105");
 
     const response = await callPatch("does-not-exist", patchRequest("does-not-exist", session.id, { title: "Updated" }));
 
@@ -223,9 +223,9 @@ describe("PATCH /api/tasks/[id]", () => {
   });
 
   it("returns 400 for invalid JSON", async () => {
-    const session = sessionFor("u1", "106");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "106");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPatch(task.id, patchRequestWithRawBody(task.id, session.id, "{ not json"));
 
@@ -233,9 +233,9 @@ describe("PATCH /api/tasks/[id]", () => {
   });
 
   it("returns 400 for an empty patch", async () => {
-    const session = sessionFor("u1", "107");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "107");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPatch(task.id, patchRequest(task.id, session.id, {}));
 
@@ -243,9 +243,9 @@ describe("PATCH /api/tasks/[id]", () => {
   });
 
   it("returns 400 for an invalid field value", async () => {
-    const session = sessionFor("u1", "108");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "108");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPatch(task.id, patchRequest(task.id, session.id, { priority: 99 }));
 
@@ -255,9 +255,9 @@ describe("PATCH /api/tasks/[id]", () => {
   });
 
   it("applies a partial update without resetting other fields", async () => {
-    const session = sessionFor("u1", "109");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "109");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPatch(task.id, patchRequest(task.id, session.id, { title: "Only title" }));
 
@@ -269,9 +269,9 @@ describe("PATCH /api/tasks/[id]", () => {
   });
 
   it("treats an explicit null deadline differently from an omitted one", async () => {
-    const session = sessionFor("u1", "110");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = createTask({
+    const session = await sessionFor("u1", "110");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await createTask({
       listId: list.id,
       title: "Task",
       description: "",
@@ -291,9 +291,9 @@ describe("PATCH /api/tasks/[id]", () => {
   });
 
   it("does not let the client change server-owned fields", async () => {
-    const session = sessionFor("u1", "111");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "111");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPatch(
       task.id,
@@ -318,56 +318,56 @@ describe("PATCH /api/tasks/[id]", () => {
   });
 
   it("accepts a same-list dependsOn update", async () => {
-    const session = sessionFor("u1", "111a");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const blocker = makeTaskIn(list.id);
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "111a");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const blocker = await makeTaskIn(list.id);
+    const task = await makeTaskIn(list.id);
 
     const response = await callPatch(task.id, patchRequest(task.id, session.id, { dependsOn: [blocker.id] }));
 
     expect(response.status).toBe(200);
-    expect(findTaskById(task.id)!.dependsOn).toEqual([blocker.id]);
+    expect((await findTaskById(task.id))!.dependsOn).toEqual([blocker.id]);
   });
 
   it("returns 400 for a dependsOn id from another list", async () => {
-    const session = sessionFor("u1", "111b");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const other = createList("u1", { title: "Other", template: "work", deadline: null });
-    const foreign = makeTaskIn(other.id);
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "111b");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const other = await createList("u1", { title: "Other", template: "work", deadline: null });
+    const foreign = await makeTaskIn(other.id);
+    const task = await makeTaskIn(list.id);
 
     const response = await callPatch(task.id, patchRequest(task.id, session.id, { dependsOn: [foreign.id] }));
 
     expect(response.status).toBe(400);
-    expect(findTaskById(task.id)!.dependsOn).toEqual([]);
+    expect((await findTaskById(task.id))!.dependsOn).toEqual([]);
   });
 
   it("returns 400 for a self dependsOn", async () => {
-    const session = sessionFor("u1", "111c");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "111c");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPatch(task.id, patchRequest(task.id, session.id, { dependsOn: [task.id] }));
 
     expect(response.status).toBe(400);
-    expect(findTaskById(task.id)!.dependsOn).toEqual([]);
+    expect((await findTaskById(task.id))!.dependsOn).toEqual([]);
   });
 
   it("cannot move a task to another list via a spoofed listId", async () => {
-    const session = sessionFor("u1", "112");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const otherList = createList("u1", { title: "Other", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "112");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const otherList = await createList("u1", { title: "Other", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     await callPatch(task.id, patchRequest(task.id, session.id, { title: "Updated", listId: otherList.id }));
 
-    expect(findTaskById(task.id)!.listId).toBe(list.id);
+    expect((await findTaskById(task.id))!.listId).toBe(list.id);
   });
 
   it("records a history entry reflecting the actual field change", async () => {
-    const session = sessionFor("u1", "113");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "113");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPatch(task.id, patchRequest(task.id, session.id, { priority: 4 }));
 
@@ -379,9 +379,9 @@ describe("PATCH /api/tasks/[id]", () => {
   });
 
   it("does not add a history entry for a no-op patch", async () => {
-    const session = sessionFor("u1", "114");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "114");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPatch(task.id, patchRequest(task.id, session.id, { title: "Task" }));
 
@@ -391,36 +391,36 @@ describe("PATCH /api/tasks/[id]", () => {
   });
 
   it("returns 409 for a dependsOn update that would create a cycle, without saving it", async () => {
-    const session = sessionFor("u1", "115");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const a = makeTaskIn(list.id);
-    const b = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "115");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const a = await makeTaskIn(list.id);
+    const b = await makeTaskIn(list.id);
     await callPatch(a.id, patchRequest(a.id, session.id, { dependsOn: [b.id] }));
 
     const response = await callPatch(b.id, patchRequest(b.id, session.id, { dependsOn: [a.id] }));
 
     expect(response.status).toBe(409);
-    expect(findTaskById(b.id)!.dependsOn).toEqual([]);
+    expect((await findTaskById(b.id))!.dependsOn).toEqual([]);
   });
 
   it("returns 422 when completing a task blocked by an incomplete dependency, without saving it", async () => {
-    const session = sessionFor("u1", "115a");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const blocker = makeTaskIn(list.id);
-    const dependent = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "115a");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const blocker = await makeTaskIn(list.id);
+    const dependent = await makeTaskIn(list.id);
     await callPatch(dependent.id, patchRequest(dependent.id, session.id, { dependsOn: [blocker.id] }));
 
     const response = await callPatch(dependent.id, patchRequest(dependent.id, session.id, { status: "done" }));
 
     expect(response.status).toBe(422);
-    expect(findTaskById(dependent.id)!.status).toBe("new");
+    expect((await findTaskById(dependent.id))!.status).toBe("new");
   });
 
   it("triggers a cascade recalculation for downstream tasks on status change", async () => {
-    const session = sessionFor("u1", "116");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const blocker = makeTaskIn(list.id);
-    const dependent = createTask({
+    const session = await sessionFor("u1", "116");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const blocker = await makeTaskIn(list.id);
+    const dependent = await createTask({
       listId: list.id,
       title: "Dependent",
       description: "",
@@ -431,7 +431,7 @@ describe("PATCH /api/tasks/[id]", () => {
       deadline: null,
       estimatedMin: 0,
     });
-    insertTasks([{ ...dependent, dependsOn: [blocker.id] }]);
+    await insertTasks([{ ...dependent, dependsOn: [blocker.id] }]);
 
     const response = await callPatch(blocker.id, patchRequest(blocker.id, session.id, { status: "done" }));
 
@@ -442,10 +442,10 @@ describe("PATCH /api/tasks/[id]", () => {
   });
 
   it("does not include unrelated tasks in the cascade result", async () => {
-    const session = sessionFor("u1", "117");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const blocker = makeTaskIn(list.id);
-    const independent = createTask({
+    const session = await sessionFor("u1", "117");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const blocker = await makeTaskIn(list.id);
+    const independent = await createTask({
       listId: list.id,
       title: "Independent",
       description: "",
@@ -466,9 +466,9 @@ describe("PATCH /api/tasks/[id]", () => {
   });
 
   it("does not compute a cascade when status is not changed", async () => {
-    const session = sessionFor("u1", "118");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "118");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPatch(task.id, patchRequest(task.id, session.id, { title: "Updated" }));
 
@@ -478,21 +478,21 @@ describe("PATCH /api/tasks/[id]", () => {
   });
 
   it("does not affect other tasks/lists it does not touch (regression)", async () => {
-    const session = sessionFor("u1", "119");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const untouched = makeTaskIn(list.id);
-    const target = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "119");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const untouched = await makeTaskIn(list.id);
+    const target = await makeTaskIn(list.id);
 
     await callPatch(target.id, patchRequest(target.id, session.id, { title: "Updated" }));
 
-    expect(findTaskById(untouched.id)!.title).toBe("Task");
+    expect((await findTaskById(untouched.id))!.title).toBe("Task");
   });
 });
 
 describe("DELETE /api/tasks/[id]", () => {
   it("returns 401 when no session cookie is present", async () => {
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callDelete(task.id, deleteRequest(task.id, undefined));
 
@@ -500,8 +500,8 @@ describe("DELETE /api/tasks/[id]", () => {
   });
 
   it("returns 401 for an unknown session id", async () => {
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callDelete(task.id, deleteRequest(task.id, "does-not-exist"));
 
@@ -509,10 +509,10 @@ describe("DELETE /api/tasks/[id]", () => {
   });
 
   it("returns 401 for a revoked session", async () => {
-    const session = sessionFor("u1", "200");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    revokeSession(session.id);
+    const session = await sessionFor("u1", "200");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    await revokeSession(session.id);
 
     const response = await callDelete(task.id, deleteRequest(task.id, session.id));
 
@@ -520,9 +520,9 @@ describe("DELETE /api/tasks/[id]", () => {
   });
 
   it("allows the owner to soft-delete the task", async () => {
-    const session = sessionFor("u1", "201");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "201");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callDelete(task.id, deleteRequest(task.id, session.id));
 
@@ -532,22 +532,22 @@ describe("DELETE /api/tasks/[id]", () => {
   });
 
   it("returns 403 for a shared edit-access user (not the owner)", async () => {
-    const session = sessionFor("u2", "202");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "edit" });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u2", "202");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "edit" });
+    const task = await makeTaskIn(list.id);
 
     const response = await callDelete(task.id, deleteRequest(task.id, session.id));
 
     expect(response.status).toBe(403);
-    expect(findTaskById(task.id)!.deletedAt).toBeNull();
+    expect((await findTaskById(task.id))!.deletedAt).toBeNull();
   });
 
   it("returns 403 for a shared read-access user", async () => {
-    const session = sessionFor("u2", "203");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "read" });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u2", "203");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "read" });
+    const task = await makeTaskIn(list.id);
 
     const response = await callDelete(task.id, deleteRequest(task.id, session.id));
 
@@ -555,9 +555,9 @@ describe("DELETE /api/tasks/[id]", () => {
   });
 
   it("returns 404 (not a leaking 403) for a user with no access at all", async () => {
-    const session = sessionFor("u2", "204");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u2", "204");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callDelete(task.id, deleteRequest(task.id, session.id));
 
@@ -565,7 +565,7 @@ describe("DELETE /api/tasks/[id]", () => {
   });
 
   it("returns 404 for an unknown task id", async () => {
-    const session = sessionFor("u1", "205");
+    const session = await sessionFor("u1", "205");
 
     const response = await callDelete("does-not-exist", deleteRequest("does-not-exist", session.id));
 
@@ -573,21 +573,21 @@ describe("DELETE /api/tasks/[id]", () => {
   });
 
   it("keeps the task in storage rather than removing it (soft delete)", async () => {
-    const session = sessionFor("u1", "206");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "206");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     await callDelete(task.id, deleteRequest(task.id, session.id));
 
-    const stored = findTaskById(task.id);
+    const stored = await findTaskById(task.id);
     expect(stored).toBeDefined();
     expect(stored!.title).toBe("Task");
   });
 
   it("records a history entry for the deletion", async () => {
-    const session = sessionFor("u1", "207");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "207");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callDelete(task.id, deleteRequest(task.id, session.id));
 
@@ -598,9 +598,9 @@ describe("DELETE /api/tasks/[id]", () => {
   });
 
   it("removes the task from the normal GET /api/tasks/[id] flow after deletion", async () => {
-    const session = sessionFor("u1", "208");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "208");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     await callDelete(task.id, deleteRequest(task.id, session.id));
     const response = await callGet(task.id, getRequest(task.id, session.id));
@@ -609,9 +609,9 @@ describe("DELETE /api/tasks/[id]", () => {
   });
 
   it("is idempotent: a repeated DELETE returns 200 without changing deletedAt or adding history", async () => {
-    const session = sessionFor("u1", "209");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "209");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const first = await callDelete(task.id, deleteRequest(task.id, session.id));
     const firstJson = await first.json();
@@ -626,13 +626,13 @@ describe("DELETE /api/tasks/[id]", () => {
   });
 
   it("does not affect other tasks it does not touch (regression)", async () => {
-    const session = sessionFor("u1", "210");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const untouched = makeTaskIn(list.id);
-    const target = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "210");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const untouched = await makeTaskIn(list.id);
+    const target = await makeTaskIn(list.id);
 
     await callDelete(target.id, deleteRequest(target.id, session.id));
 
-    expect(findTaskById(untouched.id)!.deletedAt).toBeNull();
+    expect((await findTaskById(untouched.id))!.deletedAt).toBeNull();
   });
 });

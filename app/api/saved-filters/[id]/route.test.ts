@@ -13,12 +13,12 @@ function deleteRequest(sessionId?: string) {
   });
 }
 
-function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
-  return createSession({ userId, ip: `192.0.2.${suffix} (demo)`, device: "Chrome on Windows", rememberMe: false });
+async function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
+  return await createSession({ userId, ip: `192.0.2.${suffix} (demo)`, device: "Chrome on Windows", rememberMe: false });
 }
 
-function seedFilter(id: string, userId: string) {
-  getDb().savedFilters[id] = {
+async function seedFilter(id: string, userId: string) {
+  (await getDb()).savedFilters[id] = {
     id,
     userId,
     scope: "tasks",
@@ -27,8 +27,8 @@ function seedFilter(id: string, userId: string) {
   };
 }
 
-beforeEach(() => {
-  getDb().savedFilters = {};
+beforeEach(async () => {
+  (await getDb()).savedFilters = {};
 });
 
 describe("DELETE /api/saved-filters/:id", () => {
@@ -38,27 +38,27 @@ describe("DELETE /api/saved-filters/:id", () => {
   });
 
   it("deletes the caller's own filter", async () => {
-    const session = sessionFor("u1", "96");
-    seedFilter("f1", "u1");
+    const session = await sessionFor("u1", "96");
+    await seedFilter("f1", "u1");
 
     const response = await DELETE(deleteRequest(session.id), { params: Promise.resolve({ id: "f1" }) });
 
     expect(response.status).toBe(200);
-    expect(getDb().savedFilters.f1).toBeUndefined();
+    expect((await getDb()).savedFilters.f1).toBeUndefined();
   });
 
   it("returns 404 for another user's filter and does not delete it", async () => {
-    const session = sessionFor("u1", "97");
-    seedFilter("f1", "u2");
+    const session = await sessionFor("u1", "97");
+    await seedFilter("f1", "u2");
 
     const response = await DELETE(deleteRequest(session.id), { params: Promise.resolve({ id: "f1" }) });
 
     expect(response.status).toBe(404);
-    expect(getDb().savedFilters.f1).toBeDefined();
+    expect((await getDb()).savedFilters.f1).toBeDefined();
   });
 
   it("returns 404 for a missing id", async () => {
-    const session = sessionFor("u1", "98");
+    const session = await sessionFor("u1", "98");
 
     const response = await DELETE(deleteRequest(session.id), { params: Promise.resolve({ id: "missing" }) });
 

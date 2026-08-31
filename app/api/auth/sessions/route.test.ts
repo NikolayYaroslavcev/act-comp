@@ -40,7 +40,7 @@ describe("GET /api/auth/sessions", () => {
 
   it("never returns the real session id — only a display id derived from it", async () => {
     const { sessionId, userId } = await loginAndGetSession();
-    const other = createSession({
+    const other = await createSession({
       userId,
       ip: "192.0.2.46 (demo)",
       device: "Firefox on Linux",
@@ -69,7 +69,7 @@ describe("GET /api/auth/sessions", () => {
 
   it("includes active sessions", async () => {
     const { sessionId, userId } = await loginAndGetSession();
-    const active = createSession({
+    const active = await createSession({
       userId,
       ip: "192.0.2.40 (demo)",
       device: "Firefox on Linux",
@@ -86,7 +86,7 @@ describe("GET /api/auth/sessions", () => {
 
   it("includes revoked sessions", async () => {
     const { sessionId, userId } = await loginAndGetSession();
-    const otherSession = createSession({
+    const otherSession = await createSession({
       userId,
       ip: "192.0.2.41 (demo)",
       device: "Firefox on Linux",
@@ -110,7 +110,7 @@ describe("GET /api/auth/sessions", () => {
 
   it("returns sessions ordered from newest to oldest", async () => {
     const { sessionId, userId } = await loginAndGetSession();
-    const newer = createSession({
+    const newer = await createSession({
       userId,
       ip: "192.0.2.42 (demo)",
       device: "Firefox on Linux",
@@ -126,7 +126,7 @@ describe("GET /api/auth/sessions", () => {
 
   it("does not return sessions belonging to other users", async () => {
     const { sessionId } = await loginAndGetSession();
-    const otherUserSession = createSession({
+    const otherUserSession = await createSession({
       userId: "some-other-user-sessions-test",
       ip: "192.0.2.43 (demo)",
       device: "Chrome on Windows",
@@ -153,7 +153,7 @@ describe("GET /api/auth/sessions", () => {
 
   it("marks the current session with isCurrent true and others false", async () => {
     const { sessionId, userId } = await loginAndGetSession();
-    const other = createSession({
+    const other = await createSession({
       userId,
       ip: "192.0.2.44 (demo)",
       device: "Firefox on Linux",
@@ -181,7 +181,7 @@ describe("GET /api/auth/sessions", () => {
 
   it("ignores a spoofed userId query and still returns only the current user's sessions", async () => {
     const { sessionId } = await loginAndGetSession();
-    const otherUserSession = createSession({
+    const otherUserSession = await createSession({
       userId: "spoofed-user-id",
       ip: "192.0.2.45 (demo)",
       device: "Chrome on Windows",

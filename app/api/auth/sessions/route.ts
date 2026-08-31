@@ -4,11 +4,11 @@ import { requireAuth } from "@/features/auth/require-auth";
 import { listSessions } from "@/features/auth/list-sessions";
 
 export async function GET(request: NextRequest) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if (!auth.authorized) {
     return jsonError(401, "Unauthorized");
   }
 
-  const sessions = listSessions(auth.user.id, auth.session.id);
+  const sessions = await listSessions(auth.user.id, auth.session.id);
   return jsonOk({ sessions });
 }

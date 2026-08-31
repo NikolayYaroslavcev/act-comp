@@ -7,6 +7,6 @@ import type { UpdateSettingsInput } from "@/entities/user/requests";
 export function updateSettingsForUser(
   userId: string,
   input: UpdateSettingsInput,
-): UpdateUserSettingsOutcome {
+): Promise<UpdateUserSettingsOutcome> {
   return updateUserSettings(userId, input);
 }

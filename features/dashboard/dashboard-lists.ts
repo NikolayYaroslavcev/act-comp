@@ -40,37 +40,39 @@ export interface DeletedListSummary {
   deletedAt: string;
 }
 
-export function getDashboardLists(userId: string, now: Date = new Date()): DashboardListSummary[] {
-  const visibleLists = selectVisibleLists(listLists(), userId);
-  const activities = listActivity();
+export async function getDashboardLists(userId: string, now: Date = new Date()): Promise<DashboardListSummary[]> {
+  const visibleLists = selectVisibleLists(await listLists(), userId);
+  const activities = await listActivity();
 
-  const summaries = visibleLists.map((list) => {
-    const tasks = listTasks(list.id).filter((task) => task.deletedAt === null);
-    const latestActivity = findLatestListActivity(list, activities);
+  const summaries = await Promise.all(
+    visibleLists.map(async (list) => {
+      const tasks = (await listTasks(list.id)).filter((task) => task.deletedAt === null);
+      const latestActivity = findLatestListActivity(list, activities);
 
-    return {
-      id: list.id,
-      title: list.title,
-      template: list.template,
-      deadline: list.deadline,
-      taskCount: tasks.length,
-      statusCounts: countTasksByStatus(tasks),
-      overdueCount: tasks.filter((task) => isTaskOverdue(task, now)).length,
-      progress: calculateListProgress(tasks),
-      urgency: calculateListUrgency(list, tasks, now),
-      lastActivityAt: latestActivity?.at ?? null,
-      isArchiveCandidate: isListArchiveCandidate(latestActivity?.at ?? null, now),
-      priority: calculateListPriority(tasks, now),
-      canDelete: canDeleteList(list, userId),
-      canEdit: canEditList(list, userId),
-    };
-  });
+      return {
+        id: list.id,
+        title: list.title,
+        template: list.template,
+        deadline: list.deadline,
+        taskCount: tasks.length,
+        statusCounts: countTasksByStatus(tasks),
+        overdueCount: tasks.filter((task) => isTaskOverdue(task, now)).length,
+        progress: calculateListProgress(tasks),
+        urgency: calculateListUrgency(list, tasks, now),
+        lastActivityAt: latestActivity?.at ?? null,
+        isArchiveCandidate: isListArchiveCandidate(latestActivity?.at ?? null, now),
+        priority: calculateListPriority(tasks, now),
+        canDelete: canDeleteList(list, userId),
+        canEdit: canEditList(list, userId),
+      };
+    }),
+  );
 
   return sortListsByPriority(summaries);
 }
 
-export function getDeletedDashboardLists(userId: string, now: Date = new Date()): DeletedListSummary[] {
-  return listLists()
+export async function getDeletedDashboardLists(userId: string, now: Date = new Date()): Promise<DeletedListSummary[]> {
+  return (await listLists())
     .filter((list) => list.deletedAt !== null && canDeleteList(list, userId) && canRestoreList(list, now))
     .map((list) => ({ id: list.id, title: list.title, deletedAt: list.deletedAt! }))
     .sort((a, b) => b.deletedAt.localeCompare(a.deletedAt));

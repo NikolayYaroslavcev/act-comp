@@ -7,13 +7,13 @@ import { uploadTaskAttachmentForUser } from "@/features/attachment/upload-task-a
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function GET(request: NextRequest, { params }: RouteContext) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if (!auth.authorized) {
     return jsonError(401, "Unauthorized");
   }
 
   const { id } = await params;
-  const result = listTaskAttachmentsForUser(auth.user.id, id);
+  const result = await listTaskAttachmentsForUser(auth.user.id, id);
   if (result.status === "not_found") {
     return jsonError(404, "Task not found");
   }
@@ -22,7 +22,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 }
 
 export async function POST(request: NextRequest, { params }: RouteContext) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if (!auth.authorized) {
     return jsonError(401, "Unauthorized");
   }
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
   const filename = file.name.trim() !== "" ? file.name : "file";
   const mimeType = file.type !== "" ? file.type : "application/octet-stream";
 
-  const result = uploadTaskAttachmentForUser(auth.user.id, id, { filename, mimeType, bytes });
+  const result = await uploadTaskAttachmentForUser(auth.user.id, id, { filename, mimeType, bytes });
   switch (result.status) {
     case "not_found":
       return jsonError(404, "Task not found");

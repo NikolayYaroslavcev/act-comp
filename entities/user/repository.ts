@@ -4,29 +4,29 @@ import { mergeSettings, settingsEqual } from "@/entities/user/model";
 import type { UpdateSettingsInput } from "@/entities/user/requests";
 import type { Settings, User } from "@/entities/user/schema";
 
-export function findUserByEmail(email: string): User | undefined {
+export async function findUserByEmail(email: string): Promise<User | undefined> {
   const normalized = email.toLowerCase();
-  return Object.values(getDb().users).find((user) => user.email.toLowerCase() === normalized);
+  return Object.values((await getDb()).users).find((user) => user.email.toLowerCase() === normalized);
 }
 
-export function findUserById(id: string): User | undefined {
-  return getDb().users[id];
+export async function findUserById(id: string): Promise<User | undefined> {
+  return (await getDb()).users[id];
 }
 
-export function countUsers(): number {
-  return Object.keys(getDb().users).length;
+export async function countUsers(): Promise<number> {
+  return Object.keys((await getDb()).users).length;
 }
 
 export type UpdateUserSettingsOutcome =
   | { status: "not_found" }
   | { status: "ok"; settings: Settings };
 
-export function updateUserSettings(
+export async function updateUserSettings(
   userId: string,
   patch: UpdateSettingsInput,
   now: Date = new Date(),
-): UpdateUserSettingsOutcome {
-  const db = getDb();
+): Promise<UpdateUserSettingsOutcome> {
+  const db = await getDb();
   const existing = db.users[userId];
   if (!existing) {
     return { status: "not_found" };
@@ -49,6 +49,6 @@ export function updateUserSettings(
   }
 
   db.users[userId] = { ...existing, settings: nextSettings };
-  saveDb(db);
+  await saveDb(db);
   return { status: "ok", settings: nextSettings };
 }

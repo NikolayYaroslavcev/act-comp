@@ -8,20 +8,21 @@ import type { CommentWithAuthor } from "@/entities/comment/dto";
 
 export type ListTaskCommentsOutcome = { status: "not_found" } | { status: "ok"; comments: CommentWithAuthor[] };
 
-function toCommentWithAuthor(comment: Comment): CommentWithAuthor {
-  return { ...comment, authorEmail: findUserById(comment.authorId)?.email ?? comment.authorId };
+async function toCommentWithAuthor(comment: Comment): Promise<CommentWithAuthor> {
+  return { ...comment, authorEmail: (await findUserById(comment.authorId))?.email ?? comment.authorId };
 }
 
-export function listTaskCommentsForUser(userId: string, taskId: string): ListTaskCommentsOutcome {
-  const task = findTaskById(taskId);
+export async function listTaskCommentsForUser(userId: string, taskId: string): Promise<ListTaskCommentsOutcome> {
+  const task = await findTaskById(taskId);
   if (!task || task.deletedAt !== null) {
     return { status: "not_found" };
   }
 
-  const list = findListById(task.listId);
+  const list = await findListById(task.listId);
   if (!list || list.deletedAt !== null || !canViewList(list, userId)) {
     return { status: "not_found" };
   }
 
-  return { status: "ok", comments: listCommentsForTask(taskId).map(toCommentWithAuthor) };
+  const comments = await listCommentsForTask(taskId);
+  return { status: "ok", comments: await Promise.all(comments.map(toCommentWithAuthor)) };
 }

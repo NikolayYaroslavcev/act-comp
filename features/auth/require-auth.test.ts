@@ -11,15 +11,15 @@ function requestWithSession(sessionId?: string) {
 }
 
 describe("requireAuth", () => {
-  it("authorizes a request with a valid active session", () => {
-    const session = createSession({
+  it("authorizes a request with a valid active session", async () => {
+    const session = await createSession({
       userId: "u1",
       ip: "192.0.2.5 (demo)",
       device: "Chrome on Windows",
       rememberMe: false,
     });
 
-    const result = requireAuth(requestWithSession(session.id));
+    const result = await requireAuth(requestWithSession(session.id));
 
     expect(result.authorized).toBe(true);
     if (result.authorized) {
@@ -29,23 +29,23 @@ describe("requireAuth", () => {
     }
   });
 
-  it("rejects a request with no session cookie", () => {
-    expect(requireAuth(requestWithSession())).toEqual({ authorized: false });
+  it("rejects a request with no session cookie", async () => {
+    expect(await requireAuth(requestWithSession())).toEqual({ authorized: false });
   });
 
-  it("rejects a request with an unknown session id", () => {
-    expect(requireAuth(requestWithSession("does-not-exist"))).toEqual({ authorized: false });
+  it("rejects a request with an unknown session id", async () => {
+    expect(await requireAuth(requestWithSession("does-not-exist"))).toEqual({ authorized: false });
   });
 
-  it("rejects a request with a revoked session", () => {
-    const session = createSession({
+  it("rejects a request with a revoked session", async () => {
+    const session = await createSession({
       userId: "u1",
       ip: "192.0.2.5 (demo)",
       device: "Chrome on Windows",
       rememberMe: false,
     });
-    revokeSession(session.id);
+    await revokeSession(session.id);
 
-    expect(requireAuth(requestWithSession(session.id))).toEqual({ authorized: false });
+    expect(await requireAuth(requestWithSession(session.id))).toEqual({ authorized: false });
   });
 });

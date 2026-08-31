@@ -11,15 +11,15 @@ import { AppNav } from "@/widgets/settings/app-nav";
 export default async function DashboardPage() {
   const cookieStore = await cookies();
   const sessionId = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-  const current = getCurrentSession(sessionId);
+  const current = await getCurrentSession(sessionId);
 
   if (!current) {
     return redirect("/login");
   }
 
-  const stats = getSystemStats();
-  const lists = getDashboardLists(current.user.id);
-  const deletedLists = getDeletedDashboardLists(current.user.id);
+  const stats = await getSystemStats();
+  const lists = await getDashboardLists(current.user.id);
+  const deletedLists = await getDeletedDashboardLists(current.user.id);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden bg-muted/40">

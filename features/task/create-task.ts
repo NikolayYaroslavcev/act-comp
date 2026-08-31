@@ -11,8 +11,8 @@ export type CreateTaskOutcome =
   | { status: "invalid_parent" }
   | { status: "ok"; task: Task };
 
-export function createTaskForUser(userId: string, input: CreateTaskInput): CreateTaskOutcome {
-  const list = findListById(input.listId);
+export async function createTaskForUser(userId: string, input: CreateTaskInput): Promise<CreateTaskOutcome> {
+  const list = await findListById(input.listId);
   if (!list || list.deletedAt !== null) {
     return { status: "list_not_found" };
   }
@@ -22,12 +22,12 @@ export function createTaskForUser(userId: string, input: CreateTaskInput): Creat
   }
 
   if (input.parentId !== null) {
-    const tasksById = new Map(listTasks().map((task) => [task.id, task]));
+    const tasksById = new Map((await listTasks()).map((task) => [task.id, task]));
     const childProbe = { id: "", listId: input.listId } as Task;
     if (validateParentAssignment(childProbe, input.parentId, tasksById)) {
       return { status: "invalid_parent" };
     }
   }
 
-  return { status: "ok", task: createTaskInRepository(input, userId) };
+  return { status: "ok", task: await createTaskInRepository(input, userId) };
 }

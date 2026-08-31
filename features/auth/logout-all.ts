@@ -1,5 +1,5 @@
 import { revokeAllSessionsForUser } from "@/entities/session/repository";
 
-export function logoutAll(userId: string): void {
-  revokeAllSessionsForUser(userId);
+export async function logoutAll(userId: string): Promise<void> {
+  await revokeAllSessionsForUser(userId);
 }

@@ -72,7 +72,7 @@ describe("useInlineTaskEdit", () => {
     act(() => {
       result.current.setField("title", "Изм");
     });
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(INLINE_TASK_AUTOSAVE_MS - 1);
     });
 
@@ -97,7 +97,7 @@ describe("useInlineTaskEdit", () => {
     act(() => {
       result.current.setField("title", "Изм");
     });
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(INLINE_TASK_AUTOSAVE_MS);
     });
 
@@ -121,7 +121,7 @@ describe("useInlineTaskEdit", () => {
     act(() => {
       result.current.setField("title", "Чужое");
     });
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(INLINE_TASK_AUTOSAVE_MS);
     });
 
@@ -139,7 +139,7 @@ describe("useInlineTaskEdit", () => {
     act(() => {
       result.current.setField("title", "   ");
     });
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(INLINE_TASK_AUTOSAVE_MS);
     });
 
@@ -167,7 +167,7 @@ describe("useInlineTaskEdit", () => {
       result.current.setField("estimatedMin", "90");
       result.current.setField("status", "in_progress");
     });
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(INLINE_TASK_AUTOSAVE_MS);
     });
 
@@ -202,7 +202,7 @@ describe("useInlineTaskEdit", () => {
     act(() => {
       result.current.setField("deadline", displayed);
     });
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(INLINE_TASK_AUTOSAVE_MS);
     });
     expect(patchCalls(fetchMock)).toHaveLength(0);
@@ -213,7 +213,7 @@ describe("useInlineTaskEdit", () => {
     act(() => {
       result.current.setField("deadline", nextLocal);
     });
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(INLINE_TASK_AUTOSAVE_MS);
     });
 
@@ -237,7 +237,7 @@ describe("useInlineTaskEdit", () => {
       result.current.setField("title", "Новое");
       result.current.setField("description", "Другое");
     });
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(INLINE_TASK_AUTOSAVE_MS);
     });
 
@@ -257,7 +257,7 @@ describe("useInlineTaskEdit", () => {
     act(() => {
       result.current.setField("title", "Офлайн");
     });
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(INLINE_TASK_AUTOSAVE_MS);
     });
 
@@ -280,25 +280,25 @@ describe("useInlineTaskEdit", () => {
     act(() => {
       result.current.setField("title", "B");
     });
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(INLINE_TASK_AUTOSAVE_MS);
     });
 
     act(() => {
       result.current.setField("title", "C");
     });
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(INLINE_TASK_AUTOSAVE_MS);
     });
 
     expect(resolvers).toHaveLength(2);
 
-    await act(async () => {
+    await act(() => {
       resolvers[0](jsonResponse(200, { data: { task: makeTask({ title: "B" }), cascade: [] } }));
     });
     expect(result.current.values.title).toBe("C");
 
-    await act(async () => {
+    await act(() => {
       resolvers[1](jsonResponse(200, { data: { task: makeTask({ title: "C" }), cascade: [] } }));
     });
     expect(result.current.values.title).toBe("C");
@@ -323,18 +323,18 @@ describe("useInlineTaskEdit", () => {
     act(() => {
       result.current.setField("title", "B");
     });
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(INLINE_TASK_AUTOSAVE_MS);
     });
     act(() => {
       result.current.setField("description", "D1");
     });
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(INLINE_TASK_AUTOSAVE_MS);
     });
 
     const callsBeforeTitleResolve = onTaskUpdated.mock.calls.length;
-    await act(async () => {
+    await act(() => {
       resolvers[0](jsonResponse(200, { data: { task: makeTask({ title: "B", description: "D0" }), cascade: [] } }));
     });
 
@@ -398,7 +398,7 @@ describe("useInlineTaskEdit", () => {
       act(() => {
         result.current.setField("priority", "5");
       });
-      await act(async () => {
+      await act(() => {
         vi.advanceTimersByTime(INLINE_TASK_AUTOSAVE_MS);
       });
       expect(result.current.statusOf("priority")).toBe("saving");

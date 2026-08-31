@@ -32,7 +32,7 @@ describe("useListFilters", () => {
     expect(result.current.filteredLists.map((l) => l.id)).toEqual(["l1", "l2"]);
   });
 
-  it("debounces the text search before applying it", () => {
+  it("debounces the text search before applying it", async () => {
     vi.useFakeTimers();
     const lists = [makeSummary({ id: "l1", title: "Backend" }), makeSummary({ id: "l2", title: "Frontend" })];
     const { result } = renderHook(() => useListFilters(lists));
@@ -40,7 +40,7 @@ describe("useListFilters", () => {
     act(() => result.current.setDraft({ ...EMPTY_LIST_FILTER_CRITERIA, search: "back" }));
     expect(result.current.filteredLists.map((l) => l.id)).toEqual(["l1", "l2"]);
 
-    act(() => vi.advanceTimersByTime(LIST_SEARCH_DEBOUNCE_MS));
+    await act(() => vi.advanceTimersByTime(LIST_SEARCH_DEBOUNCE_MS));
     expect(result.current.filteredLists.map((l) => l.id)).toEqual(["l1"]);
     vi.useRealTimers();
   });

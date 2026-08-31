@@ -38,7 +38,7 @@ describe("POST /api/auth/logout", () => {
 
     await logout(logoutRequest(sessionId));
 
-    expect(findSessionById(sessionId)?.revokedAt).toBeTruthy();
+    expect((await findSessionById(sessionId))?.revokedAt).toBeTruthy();
   });
 
   it("clears the session_id cookie on the response", async () => {
@@ -66,12 +66,12 @@ describe("POST /api/auth/logout", () => {
     const sessionId = await loginAndGetSessionId();
 
     await logout(logoutRequest(sessionId));
-    const revokedAtAfterFirst = findSessionById(sessionId)?.revokedAt;
+    const revokedAtAfterFirst = (await findSessionById(sessionId))?.revokedAt;
 
     const response = await logout(logoutRequest(sessionId));
 
     expect(response.status).toBe(200);
-    expect(findSessionById(sessionId)?.revokedAt).toBe(revokedAtAfterFirst);
+    expect((await findSessionById(sessionId))?.revokedAt).toBe(revokedAtAfterFirst);
   });
 
   it("makes getCurrentSession stop treating the session as active after logout", async () => {
@@ -79,6 +79,6 @@ describe("POST /api/auth/logout", () => {
 
     await logout(logoutRequest(sessionId));
 
-    expect(getCurrentSession(sessionId)).toBeNull();
+    expect(await getCurrentSession(sessionId)).toBeNull();
   });
 });

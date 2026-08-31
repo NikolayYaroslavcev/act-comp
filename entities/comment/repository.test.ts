@@ -3,9 +3,9 @@ import { createComment, listCommentsForTask } from "@/entities/comment/repositor
 import { getDb } from "@/shared/lib/db";
 
 describe("createComment", () => {
-  it("persists a comment with a generated id and the given fields", () => {
+  it("persists a comment with a generated id and the given fields", async () => {
     const taskId = `task-${crypto.randomUUID()}`;
-    const comment = createComment({ taskId, authorId: "u1", text: "Hello" });
+    const comment = await createComment({ taskId, authorId: "u1", text: "Hello" });
 
     expect(comment.id).toBeTruthy();
     expect(comment.taskId).toBe(taskId);
@@ -13,71 +13,71 @@ describe("createComment", () => {
     expect(comment.text).toBe("Hello");
   });
 
-  it("stamps createdAt from the given now", () => {
+  it("stamps createdAt from the given now", async () => {
     const taskId = `task-${crypto.randomUUID()}`;
     const now = new Date("2026-08-20T10:00:00.000Z");
 
-    const comment = createComment({ taskId, authorId: "u1", text: "Hello" }, now);
+    const comment = await createComment({ taskId, authorId: "u1", text: "Hello" }, now);
 
     expect(comment.createdAt).toBe("2026-08-20T10:00:00.000Z");
   });
 
-  it("is visible through the shared storage consumer (listCommentsForTask)", () => {
+  it("is visible through the shared storage consumer (listCommentsForTask)", async () => {
     const taskId = `task-${crypto.randomUUID()}`;
-    const comment = createComment({ taskId, authorId: "u1", text: "Hello" });
+    const comment = await createComment({ taskId, authorId: "u1", text: "Hello" });
 
-    expect(listCommentsForTask(taskId)).toEqual([comment]);
+    expect(await listCommentsForTask(taskId)).toEqual([comment]);
   });
 
-  it("stores the comment directly in the shared db under its id", () => {
+  it("stores the comment directly in the shared db under its id", async () => {
     const taskId = `task-${crypto.randomUUID()}`;
-    const comment = createComment({ taskId, authorId: "u1", text: "Hello" });
+    const comment = await createComment({ taskId, authorId: "u1", text: "Hello" });
 
-    expect(getDb().comments[comment.id]).toEqual(comment);
+    expect((await getDb()).comments[comment.id]).toEqual(comment);
   });
 });
 
 describe("listCommentsForTask", () => {
-  it("returns only comments belonging to the given task", () => {
+  it("returns only comments belonging to the given task", async () => {
     const taskId = `task-${crypto.randomUUID()}`;
     const otherTaskId = `task-${crypto.randomUUID()}`;
-    const own = createComment({ taskId, authorId: "u1", text: "Mine" });
-    createComment({ taskId: otherTaskId, authorId: "u1", text: "Not mine" });
+    const own = await createComment({ taskId, authorId: "u1", text: "Mine" });
+    await createComment({ taskId: otherTaskId, authorId: "u1", text: "Not mine" });
 
-    const result = listCommentsForTask(taskId);
+    const result = await listCommentsForTask(taskId);
 
     expect(result).toEqual([own]);
   });
 
-  it("returns an empty array for a task with no comments", () => {
+  it("returns an empty array for a task with no comments", async () => {
     const taskId = `task-${crypto.randomUUID()}`;
 
-    expect(listCommentsForTask(taskId)).toEqual([]);
+    expect(await listCommentsForTask(taskId)).toEqual([]);
   });
 
-  it("orders comments oldest to newest regardless of insertion order", () => {
+  it("orders comments oldest to newest regardless of insertion order", async () => {
     const taskId = `task-${crypto.randomUUID()}`;
-    const newer = createComment(
+    const newer = await createComment(
       { taskId, authorId: "u1", text: "Newer" },
       new Date("2026-08-20T12:00:00.000Z"),
     );
-    const older = createComment(
+    const older = await createComment(
       { taskId, authorId: "u1", text: "Older" },
       new Date("2026-08-20T08:00:00.000Z"),
     );
 
-    const result = listCommentsForTask(taskId);
+    const result = await listCommentsForTask(taskId);
 
     expect(result.map((comment) => comment.id)).toEqual([older.id, newer.id]);
   });
 
-  it("gives the same order on repeated calls (deterministic)", () => {
+  it("gives the same order on repeated calls (deterministic)", async () => {
     const taskId = `task-${crypto.randomUUID()}`;
-    createComment({ taskId, authorId: "u1", text: "A" }, new Date("2026-08-20T08:00:00.000Z"));
-    createComment({ taskId, authorId: "u1", text: "B" }, new Date("2026-08-20T08:00:00.000Z"));
+    await createComment({ taskId, authorId: "u1", text: "A" }, new Date("2026-08-20T08:00:00.000Z"));
+    await createComment({ taskId, authorId: "u1", text: "B" }, new Date("2026-08-20T08:00:00.000Z"));
 
-    const first = listCommentsForTask(taskId).map((comment) => comment.id);
-    const second = listCommentsForTask(taskId).map((comment) => comment.id);
+    const first = (await listCommentsForTask(taskId)).map((comment) => comment.id);
+    const second = (await listCommentsForTask(taskId)).map((comment) => comment.id);
 
     expect(first).toEqual(second);
   });

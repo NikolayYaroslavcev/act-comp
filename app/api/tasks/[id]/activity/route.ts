@@ -6,13 +6,13 @@ import { listTaskActivityForUser } from "@/features/task/list-task-activity";
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function GET(request: NextRequest, { params }: RouteContext) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if (!auth.authorized) {
     return jsonError(401, "Unauthorized");
   }
 
   const { id } = await params;
-  const result = listTaskActivityForUser(auth.user.id, id);
+  const result = await listTaskActivityForUser(auth.user.id, id);
   if (result.status === "not_found") {
     return jsonError(404, "Task not found");
   }

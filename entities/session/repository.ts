@@ -2,7 +2,7 @@ import { sessionStore } from "@/shared/lib/session-store";
 import type { Session } from "@/entities/session/schema";
 import type { CreateSessionInput } from "@/entities/session/requests";
 
-export function createSession(input: CreateSessionInput): Session {
+export async function createSession(input: CreateSessionInput): Promise<Session> {
   const session: Session = {
     id: crypto.randomUUID(),
     userId: input.userId,
@@ -13,16 +13,16 @@ export function createSession(input: CreateSessionInput): Session {
     revokedAt: null,
   };
 
-  sessionStore.putSession(session);
+  await sessionStore.putSession(session);
   return session;
 }
 
-export function findSessionById(id: string): Session | undefined {
+export async function findSessionById(id: string): Promise<Session | undefined> {
   return sessionStore.getSession(id);
 }
 
-export function revokeSession(id: string): Session | undefined {
-  const session = sessionStore.getSession(id);
+export async function revokeSession(id: string): Promise<Session | undefined> {
+  const session = await sessionStore.getSession(id);
   if (!session) {
     return undefined;
   }
@@ -31,12 +31,12 @@ export function revokeSession(id: string): Session | undefined {
   }
 
   const revoked: Session = { ...session, revokedAt: new Date().toISOString() };
-  sessionStore.putSession(revoked);
+  await sessionStore.putSession(revoked);
   return revoked;
 }
 
-export function revokeSessionForUser(sessionId: string, userId: string): Session | undefined {
-  const session = sessionStore.getSession(sessionId);
+export async function revokeSessionForUser(sessionId: string, userId: string): Promise<Session | undefined> {
+  const session = await sessionStore.getSession(sessionId);
   if (!session || session.userId !== userId) {
     return undefined;
   }
@@ -45,12 +45,12 @@ export function revokeSessionForUser(sessionId: string, userId: string): Session
   }
 
   const revoked: Session = { ...session, revokedAt: new Date().toISOString() };
-  sessionStore.putSession(revoked);
+  await sessionStore.putSession(revoked);
   return revoked;
 }
 
-export function getSessionsByUserId(userId: string): Session[] {
-  const sessions = sessionStore.getSessionsByUserId(userId);
+export async function getSessionsByUserId(userId: string): Promise<Session[]> {
+  const sessions = await sessionStore.getSessionsByUserId(userId);
 
   return sessions
     .map((session, index) => ({ session, index }))
@@ -61,17 +61,17 @@ export function getSessionsByUserId(userId: string): Session[] {
     .map(({ session }) => session);
 }
 
-export function revokeAllSessionsForUser(userId: string): Session[] {
+export async function revokeAllSessionsForUser(userId: string): Promise<Session[]> {
   const revokedAt = new Date().toISOString();
   const revoked: Session[] = [];
 
-  for (const session of sessionStore.getSessionsByUserId(userId)) {
+  for (const session of await sessionStore.getSessionsByUserId(userId)) {
     if (session.revokedAt !== null) {
       continue;
     }
 
     const updated: Session = { ...session, revokedAt };
-    sessionStore.putSession(updated);
+    await sessionStore.putSession(updated);
     revoked.push(updated);
   }
 

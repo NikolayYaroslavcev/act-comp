@@ -16,8 +16,8 @@ import {
 const NOW = new Date("2026-08-30T12:00:00.000Z");
 const AT = NOW.toISOString();
 
-function makeTaskIn(listId: string, title = "Task") {
-  return createTask(
+async function makeTaskIn(listId: string, title = "Task") {
+  return await createTask(
     {
       listId,
       title,
@@ -34,18 +34,18 @@ function makeTaskIn(listId: string, title = "Task") {
 }
 
 describe("task mutations record activity", () => {
-  it("records created with the acting user when createTask receives byUserId", () => {
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+  it("records created with the acting user when createTask receives byUserId", async () => {
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
-    const [created] = listActivityForTask(task.id).filter((item) => item.action === "created");
+    const [created] = (await listActivityForTask(task.id)).filter((item) => item.action === "created");
     expect(created).toMatchObject({ entityId: task.id, byUserId: "u1", action: "created" });
     expect(created.at).toBe(task.createdAt);
   });
 
-  it("does not record created when createTask has no acting user", () => {
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    const task = createTask({
+  it("does not record created when createTask has no acting user", async () => {
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    const task = await createTask({
       listId: list.id,
       title: "Anonymous",
       description: "",
@@ -57,15 +57,15 @@ describe("task mutations record activity", () => {
       estimatedMin: 0,
     });
 
-    expect(listActivityForTask(task.id).filter((item) => item.action === "created")).toEqual([]);
+    expect((await listActivityForTask(task.id)).filter((item) => item.action === "created")).toEqual([]);
   });
 
-  it("records one field activity per changed field with old/new metadata", () => {
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    updateTask(task.id, "u1", { title: "New", priority: 5 }, NOW);
+  it("records one field activity per changed field with old/new metadata", async () => {
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    await updateTask(task.id, "u1", { title: "New", priority: 5 }, NOW);
 
-    const fieldEvents = listActivityForTask(task.id).filter((item) => item.action === "updated");
+    const fieldEvents = (await listActivityForTask(task.id)).filter((item) => item.action === "updated");
     expect(fieldEvents).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -84,12 +84,12 @@ describe("task mutations record activity", () => {
     );
   });
 
-  it("records status_changed for a status update", () => {
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    updateTask(task.id, "u1", { status: "in_progress" }, NOW);
+  it("records status_changed for a status update", async () => {
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    await updateTask(task.id, "u1", { status: "in_progress" }, NOW);
 
-    expect(listActivityForTask(task.id)).toEqual(
+    expect(await listActivityForTask(task.id)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           action: "status_changed",
@@ -100,23 +100,23 @@ describe("task mutations record activity", () => {
     );
   });
 
-  it("does not record activity for a no-op update", () => {
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    const before = listActivityForTask(task.id).length;
-    updateTask(task.id, "u1", { title: "Task" }, NOW);
-    expect(listActivityForTask(task.id)).toHaveLength(before);
+  it("does not record activity for a no-op update", async () => {
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    const before = (await listActivityForTask(task.id)).length;
+    await updateTask(task.id, "u1", { title: "Task" }, NOW);
+    expect(await listActivityForTask(task.id)).toHaveLength(before);
   });
 
-  it("records a single rolled_back event instead of field updates", () => {
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    updateTask(task.id, "u1", { title: "Changed" }, NOW);
-    const afterEdit = listActivityForTask(task.id).filter((item) => item.action === "updated").length;
+  it("records a single rolled_back event instead of field updates", async () => {
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    await updateTask(task.id, "u1", { title: "Changed" }, NOW);
+    const afterEdit = (await listActivityForTask(task.id)).filter((item) => item.action === "updated").length;
 
-    rollbackTask(task.id, "u1", 0, new Date("2026-08-30T13:00:00.000Z"));
+    await rollbackTask(task.id, "u1", 0, new Date("2026-08-30T13:00:00.000Z"));
 
-    const events = listActivityForTask(task.id);
+    const events = await listActivityForTask(task.id);
     expect(events.filter((item) => item.action === "updated")).toHaveLength(afterEdit);
     expect(events).toEqual(
       expect.arrayContaining([
@@ -129,47 +129,47 @@ describe("task mutations record activity", () => {
     );
   });
 
-  it("records timer actions only when the timer actually transitions", () => {
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+  it("records timer actions only when the timer actually transitions", async () => {
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
-    applyTaskTimer(task.id, "u1", "start", NOW);
-    applyTaskTimer(task.id, "u1", "pause", new Date("2026-08-30T12:05:00.000Z"));
-    applyTaskTimer(task.id, "u1", "pause", new Date("2026-08-30T12:06:00.000Z"));
-    applyTaskTimer(task.id, "u1", "resume", new Date("2026-08-30T12:07:00.000Z"));
-    applyTaskTimer(task.id, "u1", "stop", new Date("2026-08-30T12:08:00.000Z"));
+    await applyTaskTimer(task.id, "u1", "start", NOW);
+    await applyTaskTimer(task.id, "u1", "pause", new Date("2026-08-30T12:05:00.000Z"));
+    await applyTaskTimer(task.id, "u1", "pause", new Date("2026-08-30T12:06:00.000Z"));
+    await applyTaskTimer(task.id, "u1", "resume", new Date("2026-08-30T12:07:00.000Z"));
+    await applyTaskTimer(task.id, "u1", "stop", new Date("2026-08-30T12:08:00.000Z"));
 
-    expect(listActivityForTask(task.id).map((item) => item.action)).toEqual(
+    expect((await listActivityForTask(task.id)).map((item) => item.action)).toEqual(
       expect.arrayContaining(["timer_started", "timer_paused", "timer_resumed", "timer_stopped"]),
     );
-    expect(listActivityForTask(task.id).filter((item) => item.action === "timer_paused")).toHaveLength(1);
+    expect((await listActivityForTask(task.id)).filter((item) => item.action === "timer_paused")).toHaveLength(1);
   });
 
-  it("records duplicated on the clone with the source task id", () => {
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    const result = cloneTask(task.id, NOW, "u1");
+  it("records duplicated on the clone with the source task id", async () => {
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    const result = await cloneTask(task.id, NOW, "u1");
     expect(result.status).toBe("ok");
     if (result.status !== "ok") {
       return;
     }
 
-    expect(listActivityForTask(result.task.id)).toEqual([
+    expect(await listActivityForTask(result.task.id)).toEqual([
       expect.objectContaining({
         action: "duplicated",
         byUserId: "u1",
         metadata: { sourceTaskId: task.id },
       }),
     ]);
-    expect(listActivityForTask(task.id).some((item) => item.action === "duplicated")).toBe(false);
+    expect((await listActivityForTask(task.id)).some((item) => item.action === "duplicated")).toBe(false);
   });
 
-  it("records commented with the comment id", () => {
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    const comment = createComment({ taskId: task.id, authorId: "u2", text: "Hi" }, NOW);
+  it("records commented with the comment id", async () => {
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    const comment = await createComment({ taskId: task.id, authorId: "u2", text: "Hi" }, NOW);
 
-    expect(listActivityForTask(task.id)).toEqual(
+    expect(await listActivityForTask(task.id)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           action: "commented",
@@ -180,13 +180,13 @@ describe("task mutations record activity", () => {
     );
   });
 
-  it("records an updated activity for the estimatedMin field when an extension is applied", () => {
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+  it("records an updated activity for the estimatedMin field when an extension is applied", async () => {
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
-    applyTaskExtension(task.id, "u1", { commentId: "c-combined", addedMin: 310 }, NOW);
+    await applyTaskExtension(task.id, "u1", { commentId: "c-combined", addedMin: 310 }, NOW);
 
-    expect(listActivityForTask(task.id)).toEqual(
+    expect(await listActivityForTask(task.id)).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           action: "updated",
@@ -194,26 +194,26 @@ describe("task mutations record activity", () => {
         }),
       ]),
     );
-    expect(listActivityForTask(task.id).filter((item) => item.action === "updated")).toHaveLength(1);
+    expect((await listActivityForTask(task.id)).filter((item) => item.action === "updated")).toHaveLength(1);
   });
 
-  it("records deleted and restored", () => {
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    deleteTask(task.id, "u1", NOW);
-    restoreTask(task.id, "u1", new Date("2026-08-30T12:01:00.000Z"));
+  it("records deleted and restored", async () => {
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    await deleteTask(task.id, "u1", NOW);
+    await restoreTask(task.id, "u1", new Date("2026-08-30T12:01:00.000Z"));
 
-    expect(listActivityForTask(task.id).map((item) => item.action)).toEqual(
+    expect((await listActivityForTask(task.id)).map((item) => item.action)).toEqual(
       expect.arrayContaining(["deleted", "restored"]),
     );
   });
 
-  it("does not add a second deleted activity on an already-deleted task", () => {
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    deleteTask(task.id, "u1", NOW);
-    const afterFirst = listActivityForTask(task.id).filter((item) => item.action === "deleted").length;
-    deleteTask(task.id, "u1", new Date("2026-08-30T12:02:00.000Z"));
-    expect(listActivityForTask(task.id).filter((item) => item.action === "deleted")).toHaveLength(afterFirst);
+  it("does not add a second deleted activity on an already-deleted task", async () => {
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    await deleteTask(task.id, "u1", NOW);
+    const afterFirst = (await listActivityForTask(task.id)).filter((item) => item.action === "deleted").length;
+    await deleteTask(task.id, "u1", new Date("2026-08-30T12:02:00.000Z"));
+    expect((await listActivityForTask(task.id)).filter((item) => item.action === "deleted")).toHaveLength(afterFirst);
   });
 });

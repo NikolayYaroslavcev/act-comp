@@ -1,11 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
+import { put, get } from "@vercel/blob";
 import data from "@/data.json";
 import { databaseSchema, type Database } from "@/entities/database/schema";
 
 export interface DbStore {
-  getDb(): Database;
-  saveDb(db: Database): void;
+  getDb(): Promise<Database>;
+  saveDb(db: Database): Promise<void>;
 }
 
 function seedDb(): Database {
@@ -44,6 +45,10 @@ function parsePersistedDb(raw: string): Database {
  * across concurrent writers (read-modify-write can race and the later write
  * wins) — fine for this app's scale (single local Node process, low
  * concurrency), not a substitute for a real datastore under real load.
+ *
+ * Only usable on a host with a persistent, shared filesystem (a long-lived
+ * Node process) — see `createBlobDbStore` for serverless deployments where
+ * every invocation gets its own ephemeral filesystem.
  */
 export function createFileDbStore(filePath: string): DbStore {
   function readAll(): Database {
@@ -69,6 +74,48 @@ export function createFileDbStore(filePath: string): DbStore {
   }
 
   return {
+    async getDb() {
+      return readAll();
+    },
+    async saveDb(db) {
+      writeAll(db);
+    },
+  };
+}
+
+/**
+ * Vercel Blob-backed store, for serverless deployments (Vercel/Netlify)
+ * where each function invocation gets its own ephemeral filesystem, so a
+ * file on disk can't be shared between requests. Reads/writes the whole
+ * database as a single private blob at a fixed pathname — same
+ * read-modify-write-the-whole-document semantics as `createFileDbStore`
+ * (including the same no-locking, race-on-concurrent-write caveat), just
+ * backed by Vercel's object storage instead of the local disk.
+ */
+export function createBlobDbStore(pathname: string): DbStore {
+  async function readAll(): Promise<Database> {
+    const result = await get(pathname, { access: "private" });
+
+    if (!result || result.statusCode !== 200) {
+      const seeded = seedDb();
+      await writeAll(seeded);
+      return seeded;
+    }
+
+    const raw = await new Response(result.stream).text();
+    return parsePersistedDb(raw);
+  }
+
+  async function writeAll(db: Database): Promise<void> {
+    await put(pathname, JSON.stringify(db), {
+      access: "private",
+      addRandomSuffix: false,
+      allowOverwrite: true,
+      contentType: "application/json",
+    });
+  }
+
+  return {
     getDb: readAll,
     saveDb: writeAll,
   };
@@ -79,13 +126,13 @@ function createMemoryDbStore(): DbStore {
   let db: Database | null = null;
 
   return {
-    getDb() {
+    async getDb() {
       if (!db) {
         db = seedDb();
       }
       return db;
     },
-    saveDb(next) {
+    async saveDb(next) {
       db = next;
     },
   };
@@ -93,12 +140,22 @@ function createMemoryDbStore(): DbStore {
 
 const DEFAULT_STATE_PATH = path.join(process.cwd(), ".local-state", "db.json");
 
-const dbStore: DbStore = process.env.VITEST ? createMemoryDbStore() : createFileDbStore(DEFAULT_STATE_PATH);
+function createDbStore(): DbStore {
+  if (process.env.VITEST) {
+    return createMemoryDbStore();
+  }
+  if (process.env.BLOB_READ_WRITE_TOKEN) {
+    return createBlobDbStore("db.json");
+  }
+  return createFileDbStore(DEFAULT_STATE_PATH);
+}
 
-export function getDb(): Database {
+const dbStore: DbStore = createDbStore();
+
+export function getDb(): Promise<Database> {
   return dbStore.getDb();
 }
 
-export function saveDb(db: Database): void {
-  dbStore.saveDb(db);
+export function saveDb(db: Database): Promise<void> {
+  return dbStore.saveDb(db);
 }

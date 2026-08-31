@@ -7,7 +7,7 @@ import { shareList } from "@/features/list/share-list";
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function POST(request: NextRequest, { params }: RouteContext) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if (!auth.authorized) {
     return jsonError(401, "Unauthorized");
   }
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     return jsonError(400, "Validation failed", parsed.error.issues);
   }
 
-  const result = shareList(auth.user.id, id, parsed.data);
+  const result = await shareList(auth.user.id, id, parsed.data);
   switch (result.status) {
     case "not_found":
     case "deleted":

@@ -18,8 +18,8 @@ import { getDb } from "@/shared/lib/db";
 import type { Task } from "@/entities/task/schema";
 
 describe("countTasks", () => {
-  it("counts every task in the store", () => {
-    expect(countTasks()).toBe(Object.keys(getDb().tasks).length);
+  it("counts every task in the store", async () => {
+    expect(await countTasks()).toBe(Object.keys((await getDb()).tasks).length);
   });
 });
 
@@ -51,9 +51,9 @@ function makeTask(overrides: Partial<Task>): Task {
 }
 
 describe("createTask", () => {
-  it("generates a TEST-N code scoped to the given list", () => {
+  it("generates a TEST-N code scoped to the given list", async () => {
     const listId = `create-l-${crypto.randomUUID()}`;
-    const first = createTask({
+    const first = await createTask({
       listId,
       title: "First",
       description: "",
@@ -64,7 +64,7 @@ describe("createTask", () => {
       deadline: null,
       estimatedMin: 0,
     });
-    const second = createTask({
+    const second = await createTask({
       listId,
       title: "Second",
       description: "",
@@ -80,10 +80,10 @@ describe("createTask", () => {
     expect(second.code).toBe("TEST-2");
   });
 
-  it("does not reuse the code of a deleted task, avoiding a collision with a later code", () => {
+  it("does not reuse the code of a deleted task, avoiding a collision with a later code", async () => {
     const listId = `create-l-${crypto.randomUUID()}`;
-    const makeInList = () =>
-      createTask({
+    const makeInList = async () =>
+      await createTask({
         listId,
         title: "Task",
         description: "",
@@ -95,22 +95,22 @@ describe("createTask", () => {
         estimatedMin: 0,
       });
 
-    const first = makeInList();
-    const second = makeInList();
-    const third = makeInList();
-    deleteTask(second.id, "u1");
+    const first = await makeInList();
+    const second = await makeInList();
+    const third = await makeInList();
+    await deleteTask(second.id, "u1");
 
-    const fourth = makeInList();
+    const fourth = await makeInList();
 
     const codes = [first.code, second.code, third.code, fourth.code];
     expect(new Set(codes).size).toBe(codes.length);
     expect(fourth.code).not.toBe(third.code);
   });
 
-  it("keeps generating unique codes across several consecutive creates after a delete", () => {
+  it("keeps generating unique codes across several consecutive creates after a delete", async () => {
     const listId = `create-l-${crypto.randomUUID()}`;
-    const makeInList = () =>
-      createTask({
+    const makeInList = async () =>
+      await createTask({
         listId,
         title: "Task",
         description: "",
@@ -122,19 +122,19 @@ describe("createTask", () => {
         estimatedMin: 0,
       });
 
-    const first = makeInList();
-    const second = makeInList();
-    deleteTask(second.id, "u1");
+    const first = await makeInList();
+    const second = await makeInList();
+    await deleteTask(second.id, "u1");
 
-    const created = [makeInList(), makeInList(), makeInList()];
+    const created = [await makeInList(), await makeInList(), await makeInList()];
 
     const codes = [first.code, second.code, ...created.map((task) => task.code)];
     expect(new Set(codes).size).toBe(codes.length);
   });
 
-  it("treats a soft-deleted task's code as still occupied", () => {
+  it("treats a soft-deleted task's code as still occupied", async () => {
     const listId = `create-l-${crypto.randomUUID()}`;
-    const first = createTask({
+    const first = await createTask({
       listId,
       title: "First",
       description: "",
@@ -145,9 +145,9 @@ describe("createTask", () => {
       deadline: null,
       estimatedMin: 0,
     });
-    deleteTask(first.id, "u1");
+    await deleteTask(first.id, "u1");
 
-    const second = createTask({
+    const second = await createTask({
       listId,
       title: "Second",
       description: "",
@@ -162,10 +162,10 @@ describe("createTask", () => {
     expect(second.code).not.toBe(first.code);
   });
 
-  it("does not let codes from another list influence the next code", () => {
+  it("does not let codes from another list influence the next code", async () => {
     const listA = `create-l-${crypto.randomUUID()}`;
     const listB = `create-l-${crypto.randomUUID()}`;
-    createTask({
+    await createTask({
       listId: listA,
       title: "In A",
       description: "",
@@ -176,7 +176,7 @@ describe("createTask", () => {
       deadline: null,
       estimatedMin: 0,
     });
-    createTask({
+    await createTask({
       listId: listA,
       title: "In A too",
       description: "",
@@ -188,7 +188,7 @@ describe("createTask", () => {
       estimatedMin: 0,
     });
 
-    const firstInB = createTask({
+    const firstInB = await createTask({
       listId: listB,
       title: "In B",
       description: "",
@@ -203,15 +203,15 @@ describe("createTask", () => {
     expect(firstInB.code).toBe("TEST-1");
   });
 
-  it("fills a gap left by a missing code instead of always appending", () => {
+  it("fills a gap left by a missing code instead of always appending", async () => {
     const listId = `create-l-${crypto.randomUUID()}`;
-    insertTasks([
+    await insertTasks([
       makeTask({ id: "gap-t1", listId, code: "TEST-1" }),
       makeTask({ id: "gap-t2", listId, code: "TEST-2" }),
       makeTask({ id: "gap-t4", listId, code: "TEST-4" }),
     ]);
 
-    const created = createTask({
+    const created = await createTask({
       listId,
       title: "Fills gap",
       description: "",
@@ -226,16 +226,16 @@ describe("createTask", () => {
     expect(created.code).toBe("TEST-3");
   });
 
-  it("skips a gap number that is already taken and picks the next free one", () => {
+  it("skips a gap number that is already taken and picks the next free one", async () => {
     const listId = `create-l-${crypto.randomUUID()}`;
-    insertTasks([
+    await insertTasks([
       makeTask({ id: "gap2-t1", listId, code: "TEST-1" }),
       makeTask({ id: "gap2-t2", listId, code: "TEST-2" }),
       makeTask({ id: "gap2-t3", listId, code: "TEST-3" }),
       makeTask({ id: "gap2-t5", listId, code: "TEST-5" }),
     ]);
 
-    const created = createTask({
+    const created = await createTask({
       listId,
       title: "Fills next gap",
       description: "",
@@ -250,11 +250,11 @@ describe("createTask", () => {
     expect(created.code).toBe("TEST-4");
   });
 
-  it("ignores a malformed existing code instead of crashing", () => {
+  it("ignores a malformed existing code instead of crashing", async () => {
     const listId = `create-l-${crypto.randomUUID()}`;
-    insertTasks([makeTask({ id: "malformed-t1", listId, code: "TEST-x" })]);
+    await insertTasks([makeTask({ id: "malformed-t1", listId, code: "TEST-x" })]);
 
-    const created = createTask({
+    const created = await createTask({
       listId,
       title: "After malformed",
       description: "",
@@ -269,9 +269,9 @@ describe("createTask", () => {
     expect(created.code).toBe("TEST-1");
   });
 
-  it("sets server-owned defaults on the created task", () => {
+  it("sets server-owned defaults on the created task", async () => {
     const listId = `create-l-${crypto.randomUUID()}`;
-    const task = createTask({
+    const task = await createTask({
       listId,
       title: "Task",
       description: "",
@@ -294,9 +294,9 @@ describe("createTask", () => {
     expect(task.deletedAt).toBeNull();
   });
 
-  it("persists the created task in the repository", () => {
+  it("persists the created task in the repository", async () => {
     const listId = `create-l-${crypto.randomUUID()}`;
-    const task = createTask({
+    const task = await createTask({
       listId,
       title: "Task",
       description: "",
@@ -308,25 +308,25 @@ describe("createTask", () => {
       estimatedMin: 0,
     });
 
-    expect(findTaskById(task.id)).toEqual(task);
+    expect(await findTaskById(task.id)).toEqual(task);
   });
 
-  it("falls back to the creating user's settings.taskDefaults when priority/category/estimatedMin are omitted", () => {
-    updateUserSettings("u1", { taskDefaults: { priority: 5, category: "Backend", estimatedMin: 45 } });
+  it("falls back to the creating user's settings.taskDefaults when priority/category/estimatedMin are omitted", async () => {
+    await updateUserSettings("u1", { taskDefaults: { priority: 5, category: "Backend", estimatedMin: 45 } });
     const listId = `create-l-${crypto.randomUUID()}`;
 
-    const task = createTask({ listId, title: "Task", description: "", tags: [], parentId: null, deadline: null }, "u1");
+    const task = await createTask({ listId, title: "Task", description: "", tags: [], parentId: null, deadline: null }, "u1");
 
     expect(task.priority).toBe(5);
     expect(task.category).toBe("Backend");
     expect(task.estimatedMin).toBe(45);
   });
 
-  it("respects an explicitly provided value even when it equals the built-in default", () => {
-    updateUserSettings("u1", { taskDefaults: { priority: 5, category: "Backend", estimatedMin: 45 } });
+  it("respects an explicitly provided value even when it equals the built-in default", async () => {
+    await updateUserSettings("u1", { taskDefaults: { priority: 5, category: "Backend", estimatedMin: 45 } });
     const listId = `create-l-${crypto.randomUUID()}`;
 
-    const task = createTask(
+    const task = await createTask(
       { listId, title: "Task", description: "", tags: [], parentId: null, deadline: null, priority: 2, category: null, estimatedMin: 0 },
       "u1",
     );
@@ -336,22 +336,22 @@ describe("createTask", () => {
     expect(task.estimatedMin).toBe(0);
   });
 
-  it("does not leak one user's taskDefaults into another user's created task", () => {
-    updateUserSettings("u1", { taskDefaults: { priority: 5, category: "Backend", estimatedMin: 45 } });
-    updateUserSettings("u2", { taskDefaults: { priority: 1, category: "Design", estimatedMin: 20 } });
+  it("does not leak one user's taskDefaults into another user's created task", async () => {
+    await updateUserSettings("u1", { taskDefaults: { priority: 5, category: "Backend", estimatedMin: 45 } });
+    await updateUserSettings("u2", { taskDefaults: { priority: 1, category: "Design", estimatedMin: 20 } });
     const listId = `create-l-${crypto.randomUUID()}`;
 
-    const task = createTask({ listId, title: "Task", description: "", tags: [], parentId: null, deadline: null }, "u2");
+    const task = await createTask({ listId, title: "Task", description: "", tags: [], parentId: null, deadline: null }, "u2");
 
     expect(task.priority).toBe(1);
     expect(task.category).toBe("Design");
     expect(task.estimatedMin).toBe(20);
   });
 
-  it("falls back to the built-in defaults when no creating user is provided", () => {
+  it("falls back to the built-in defaults when no creating user is provided", async () => {
     const listId = `create-l-${crypto.randomUUID()}`;
 
-    const task = createTask({ listId, title: "Task", description: "", tags: [], parentId: null, deadline: null });
+    const task = await createTask({ listId, title: "Task", description: "", tags: [], parentId: null, deadline: null });
 
     expect(task.priority).toBe(3);
     expect(task.category).toBeNull();
@@ -360,306 +360,306 @@ describe("createTask", () => {
 });
 
 describe("insertTasks", () => {
-  it("stores each given task so it can be found by id", () => {
+  it("stores each given task so it can be found by id", async () => {
     const task = makeTask({ id: "insert-t2" });
 
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    expect(findTaskById("insert-t2")).toEqual(task);
+    expect(await findTaskById("insert-t2")).toEqual(task);
   });
 
-  it("makes inserted tasks discoverable by listId", () => {
+  it("makes inserted tasks discoverable by listId", async () => {
     const task = makeTask({ id: "insert-t3", listId: "insert-l3" });
 
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    expect(listTasks("insert-l3")).toEqual([task]);
+    expect(await listTasks("insert-l3")).toEqual([task]);
   });
 
-  it("increases the total task count by the number of inserted tasks", () => {
-    const before = countTasks();
+  it("increases the total task count by the number of inserted tasks", async () => {
+    const before = await countTasks();
 
-    insertTasks([makeTask({ id: "insert-t4" }), makeTask({ id: "insert-t5" })]);
+    await insertTasks([makeTask({ id: "insert-t4" }), makeTask({ id: "insert-t5" })]);
 
-    expect(countTasks()).toBe(before + 2);
+    expect(await countTasks()).toBe(before + 2);
   });
 
-  it("does nothing for an empty array", () => {
-    const before = countTasks();
+  it("does nothing for an empty array", async () => {
+    const before = await countTasks();
 
-    insertTasks([]);
+    await insertTasks([]);
 
-    expect(countTasks()).toBe(before);
+    expect(await countTasks()).toBe(before);
   });
 });
 
 describe("updateTask", () => {
   const NOW = new Date("2026-08-27T12:00:00.000Z");
 
-  it("returns not_found for an unknown task id", () => {
-    expect(updateTask("does-not-exist", "u1", { title: "New" }, NOW)).toEqual({ status: "not_found" });
+  it("returns not_found for an unknown task id", async () => {
+    expect(await updateTask("does-not-exist", "u1", { title: "New" }, NOW)).toEqual({ status: "not_found" });
   });
 
-  it("returns not_found for a soft-deleted task", () => {
+  it("returns not_found for a soft-deleted task", async () => {
     const task = makeTask({ id: "upd-deleted", deletedAt: "2026-08-01T00:00:00.000Z" });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    expect(updateTask(task.id, "u1", { title: "New" }, NOW)).toEqual({ status: "not_found" });
+    expect(await updateTask(task.id, "u1", { title: "New" }, NOW)).toEqual({ status: "not_found" });
   });
 
-  it("applies a single-field patch and persists it", () => {
+  it("applies a single-field patch and persists it", async () => {
     const task = makeTask({ id: "upd-title", title: "Old" });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    const result = updateTask(task.id, "u1", { title: "New" }, NOW);
+    const result = await updateTask(task.id, "u1", { title: "New" }, NOW);
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
       expect(result.task.title).toBe("New");
     }
-    expect(findTaskById(task.id)!.title).toBe("New");
+    expect((await findTaskById(task.id))!.title).toBe("New");
   });
 
-  it("leaves fields not present in the patch untouched", () => {
+  it("leaves fields not present in the patch untouched", async () => {
     const task = makeTask({ id: "upd-partial", title: "Old", description: "keep me", priority: 2 });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    updateTask(task.id, "u1", { title: "New" }, NOW);
+    await updateTask(task.id, "u1", { title: "New" }, NOW);
 
-    const stored = findTaskById(task.id)!;
+    const stored = (await findTaskById(task.id))!;
     expect(stored.description).toBe("keep me");
     expect(stored.priority).toBe(2);
   });
 
-  it("distinguishes an explicit null deadline from an untouched one", () => {
+  it("distinguishes an explicit null deadline from an untouched one", async () => {
     const task = makeTask({ id: "upd-deadline", deadline: "2026-09-01T00:00:00.000Z" });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    updateTask(task.id, "u1", { deadline: null }, NOW);
+    await updateTask(task.id, "u1", { deadline: null }, NOW);
 
-    expect(findTaskById(task.id)!.deadline).toBeNull();
+    expect((await findTaskById(task.id))!.deadline).toBeNull();
   });
 
-  it("records a history entry with old/new values, byUserId, and timestamp", () => {
+  it("records a history entry with old/new values, byUserId, and timestamp", async () => {
     const task = makeTask({ id: "upd-history", priority: 2 });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    updateTask(task.id, "u1", { priority: 4 }, NOW);
+    await updateTask(task.id, "u1", { priority: 4 }, NOW);
 
-    expect(findTaskById(task.id)!.history).toEqual([
+    expect((await findTaskById(task.id))!.history).toEqual([
       { field: "priority", old: 2, new: 4, at: NOW.toISOString(), byUserId: "u1" },
     ]);
   });
 
-  it("records one history entry per changed field", () => {
+  it("records one history entry per changed field", async () => {
     const task = makeTask({ id: "upd-multi", title: "Old", priority: 2 });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    updateTask(task.id, "u1", { title: "New", priority: 4 }, NOW);
+    await updateTask(task.id, "u1", { title: "New", priority: 4 }, NOW);
 
-    const history = findTaskById(task.id)!.history;
+    const history = (await findTaskById(task.id))!.history;
     expect(history.map((entry) => entry.field)).toEqual(["title", "priority"]);
   });
 
-  it("does not add a history entry or change data for a no-op patch", () => {
+  it("does not add a history entry or change data for a no-op patch", async () => {
     const task = makeTask({ id: "upd-noop", title: "Task" });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    const result = updateTask(task.id, "u1", { title: "Task" }, NOW);
+    const result = await updateTask(task.id, "u1", { title: "Task" }, NOW);
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
       expect(result.task).toEqual(task);
     }
-    expect(findTaskById(task.id)!.history).toEqual([]);
+    expect((await findTaskById(task.id))!.history).toEqual([]);
   });
 
-  it("rejects a self-referencing parentId without persisting", () => {
+  it("rejects a self-referencing parentId without persisting", async () => {
     const task = makeTask({ id: "upd-self-parent" });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    const result = updateTask(task.id, "u1", { parentId: "upd-self-parent" }, NOW);
+    const result = await updateTask(task.id, "u1", { parentId: "upd-self-parent" }, NOW);
 
     expect(result).toEqual({ status: "invalid_parent" });
-    expect(findTaskById(task.id)!.parentId).toBeNull();
+    expect((await findTaskById(task.id))!.parentId).toBeNull();
   });
 
-  it("rejects a parentId that does not reference an existing task", () => {
+  it("rejects a parentId that does not reference an existing task", async () => {
     const task = makeTask({ id: "upd-missing-parent" });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    const result = updateTask(task.id, "u1", { parentId: "does-not-exist" }, NOW);
+    const result = await updateTask(task.id, "u1", { parentId: "does-not-exist" }, NOW);
 
     expect(result).toEqual({ status: "invalid_parent" });
   });
 
-  it("rejects a parentId that references a task in a different list", () => {
+  it("rejects a parentId that references a task in a different list", async () => {
     const other = makeTask({ id: "upd-other-list", listId: "other-list" });
     const task = makeTask({ id: "upd-cross-list", listId: "this-list" });
-    insertTasks([other, task]);
+    await insertTasks([other, task]);
 
-    const result = updateTask(task.id, "u1", { parentId: "upd-other-list" }, NOW);
+    const result = await updateTask(task.id, "u1", { parentId: "upd-other-list" }, NOW);
 
     expect(result).toEqual({ status: "invalid_parent" });
   });
 
-  it("accepts a parentId that references an existing task in the same list", () => {
+  it("accepts a parentId that references an existing task in the same list", async () => {
     const parent = makeTask({ id: "upd-valid-parent", listId: "same-list" });
     const task = makeTask({ id: "upd-child", listId: "same-list" });
-    insertTasks([parent, task]);
+    await insertTasks([parent, task]);
 
-    const result = updateTask(task.id, "u1", { parentId: "upd-valid-parent" }, NOW);
+    const result = await updateTask(task.id, "u1", { parentId: "upd-valid-parent" }, NOW);
 
     expect(result.status).toBe("ok");
-    expect(findTaskById(task.id)!.parentId).toBe("upd-valid-parent");
+    expect((await findTaskById(task.id))!.parentId).toBe("upd-valid-parent");
   });
 
-  it("rejects a parentId that would create a parent-hierarchy cycle", () => {
+  it("rejects a parentId that would create a parent-hierarchy cycle", async () => {
     const grandparent = makeTask({ id: "upd-cyc-gp", listId: "cyc-hier-list" });
     const parent = makeTask({ id: "upd-cyc-p", listId: "cyc-hier-list", parentId: "upd-cyc-gp" });
-    insertTasks([grandparent, parent]);
+    await insertTasks([grandparent, parent]);
 
-    const result = updateTask(grandparent.id, "u1", { parentId: parent.id }, NOW);
+    const result = await updateTask(grandparent.id, "u1", { parentId: parent.id }, NOW);
 
     expect(result).toEqual({ status: "invalid_parent" });
-    expect(findTaskById(grandparent.id)!.parentId).toBeNull();
+    expect((await findTaskById(grandparent.id))!.parentId).toBeNull();
   });
 
-  it("adds the child id to the new parent's subtaskIds when parentId is assigned", () => {
+  it("adds the child id to the new parent's subtaskIds when parentId is assigned", async () => {
     const parent = makeTask({ id: "upd-sync-parent", listId: "sync-list" });
     const child = makeTask({ id: "upd-sync-child", listId: "sync-list" });
-    insertTasks([parent, child]);
+    await insertTasks([parent, child]);
 
-    updateTask(child.id, "u1", { parentId: parent.id }, NOW);
+    await updateTask(child.id, "u1", { parentId: parent.id }, NOW);
 
-    expect(findTaskById(parent.id)!.subtaskIds).toEqual([child.id]);
+    expect((await findTaskById(parent.id))!.subtaskIds).toEqual([child.id]);
   });
 
-  it("moves the child id from the old parent's subtaskIds to the new parent's when re-parenting", () => {
+  it("moves the child id from the old parent's subtaskIds to the new parent's when re-parenting", async () => {
     const oldParent = makeTask({ id: "upd-sync-old", listId: "sync-list-2", subtaskIds: ["upd-sync-child-2"] });
     const newParent = makeTask({ id: "upd-sync-new", listId: "sync-list-2" });
     const child = makeTask({ id: "upd-sync-child-2", listId: "sync-list-2", parentId: "upd-sync-old" });
-    insertTasks([oldParent, newParent, child]);
+    await insertTasks([oldParent, newParent, child]);
 
-    updateTask(child.id, "u1", { parentId: newParent.id }, NOW);
+    await updateTask(child.id, "u1", { parentId: newParent.id }, NOW);
 
-    expect(findTaskById(oldParent.id)!.subtaskIds).toEqual([]);
-    expect(findTaskById(newParent.id)!.subtaskIds).toEqual([child.id]);
+    expect((await findTaskById(oldParent.id))!.subtaskIds).toEqual([]);
+    expect((await findTaskById(newParent.id))!.subtaskIds).toEqual([child.id]);
   });
 
-  it("removes the child id from the old parent's subtaskIds when parentId is cleared", () => {
+  it("removes the child id from the old parent's subtaskIds when parentId is cleared", async () => {
     const parent = makeTask({ id: "upd-sync-clear-parent", listId: "sync-list-3", subtaskIds: ["upd-sync-clear-child"] });
     const child = makeTask({
       id: "upd-sync-clear-child",
       listId: "sync-list-3",
       parentId: "upd-sync-clear-parent",
     });
-    insertTasks([parent, child]);
+    await insertTasks([parent, child]);
 
-    const result = updateTask(child.id, "u1", { parentId: null }, NOW);
+    const result = await updateTask(child.id, "u1", { parentId: null }, NOW);
 
     expect(result.status).toBe("ok");
-    expect(findTaskById(child.id)!.parentId).toBeNull();
-    expect(findTaskById(parent.id)!.subtaskIds).toEqual([]);
+    expect((await findTaskById(child.id))!.parentId).toBeNull();
+    expect((await findTaskById(parent.id))!.subtaskIds).toEqual([]);
   });
 
-  it("does not duplicate the child id if it is already present in the new parent's subtaskIds", () => {
+  it("does not duplicate the child id if it is already present in the new parent's subtaskIds", async () => {
     const parent = makeTask({ id: "upd-sync-dup-parent", listId: "sync-list-4", subtaskIds: ["upd-sync-dup-child"] });
     const child = makeTask({ id: "upd-sync-dup-child", listId: "sync-list-4", parentId: null });
-    insertTasks([parent, child]);
+    await insertTasks([parent, child]);
 
-    updateTask(child.id, "u1", { parentId: parent.id }, NOW);
+    await updateTask(child.id, "u1", { parentId: parent.id }, NOW);
 
-    expect(findTaskById(parent.id)!.subtaskIds).toEqual(["upd-sync-dup-child"]);
+    expect((await findTaskById(parent.id))!.subtaskIds).toEqual(["upd-sync-dup-child"]);
   });
 
-  it("does not touch subtaskIds on other tasks when parentId is not part of the patch", () => {
+  it("does not touch subtaskIds on other tasks when parentId is not part of the patch", async () => {
     const parent = makeTask({ id: "upd-sync-untouched-parent", listId: "sync-list-5", subtaskIds: ["upd-sync-untouched-child"] });
     const child = makeTask({
       id: "upd-sync-untouched-child",
       listId: "sync-list-5",
       parentId: "upd-sync-untouched-parent",
     });
-    insertTasks([parent, child]);
+    await insertTasks([parent, child]);
 
-    updateTask(child.id, "u1", { title: "Renamed" }, NOW);
+    await updateTask(child.id, "u1", { title: "Renamed" }, NOW);
 
-    expect(findTaskById(parent.id)!.subtaskIds).toEqual(["upd-sync-untouched-child"]);
+    expect((await findTaskById(parent.id))!.subtaskIds).toEqual(["upd-sync-untouched-child"]);
   });
 
-  it("rejects a dependsOn update that creates a self-cycle, without persisting", () => {
+  it("rejects a dependsOn update that creates a self-cycle, without persisting", async () => {
     const task = makeTask({ id: "upd-self-cycle" });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    const result = updateTask(task.id, "u1", { dependsOn: ["upd-self-cycle"] }, NOW);
+    const result = await updateTask(task.id, "u1", { dependsOn: ["upd-self-cycle"] }, NOW);
 
     expect(result).toEqual({ status: "invalid_dependsOn" });
-    expect(findTaskById(task.id)!.dependsOn).toEqual([]);
+    expect((await findTaskById(task.id))!.dependsOn).toEqual([]);
   });
 
-  it("rejects a dependsOn id from another list, without persisting", () => {
+  it("rejects a dependsOn id from another list, without persisting", async () => {
     const foreign = makeTask({ id: "upd-dep-foreign", listId: "other-list" });
     const task = makeTask({ id: "upd-dep-local", listId: "this-list" });
-    insertTasks([foreign, task]);
+    await insertTasks([foreign, task]);
 
-    const result = updateTask(task.id, "u1", { dependsOn: ["upd-dep-foreign"] }, NOW);
+    const result = await updateTask(task.id, "u1", { dependsOn: ["upd-dep-foreign"] }, NOW);
 
     expect(result).toEqual({ status: "invalid_dependsOn" });
-    expect(findTaskById(task.id)!.dependsOn).toEqual([]);
+    expect((await findTaskById(task.id))!.dependsOn).toEqual([]);
   });
 
-  it("rejects a deleted dependsOn target, without persisting", () => {
+  it("rejects a deleted dependsOn target, without persisting", async () => {
     const blocker = makeTask({
       id: "upd-dep-deleted",
       listId: "dep-list",
       deletedAt: "2026-08-01T00:00:00.000Z",
     });
     const task = makeTask({ id: "upd-dep-live", listId: "dep-list" });
-    insertTasks([blocker, task]);
+    await insertTasks([blocker, task]);
 
-    const result = updateTask(task.id, "u1", { dependsOn: ["upd-dep-deleted"] }, NOW);
+    const result = await updateTask(task.id, "u1", { dependsOn: ["upd-dep-deleted"] }, NOW);
 
     expect(result).toEqual({ status: "invalid_dependsOn" });
-    expect(findTaskById(task.id)!.dependsOn).toEqual([]);
+    expect((await findTaskById(task.id))!.dependsOn).toEqual([]);
   });
 
-  it("rejects an unknown dependsOn id, without persisting", () => {
+  it("rejects an unknown dependsOn id, without persisting", async () => {
     const task = makeTask({ id: "upd-dep-unknown", listId: "dep-list" });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    const result = updateTask(task.id, "u1", { dependsOn: ["does-not-exist"] }, NOW);
+    const result = await updateTask(task.id, "u1", { dependsOn: ["does-not-exist"] }, NOW);
 
     expect(result).toEqual({ status: "invalid_dependsOn" });
-    expect(findTaskById(task.id)!.dependsOn).toEqual([]);
+    expect((await findTaskById(task.id))!.dependsOn).toEqual([]);
   });
 
-  it("rejects a dependsOn update that creates a regular cycle, without persisting", () => {
+  it("rejects a dependsOn update that creates a regular cycle, without persisting", async () => {
     const a = makeTask({ id: "upd-cyc-a", listId: "cyc-list", dependsOn: ["upd-cyc-b"] });
     const b = makeTask({ id: "upd-cyc-b", listId: "cyc-list" });
-    insertTasks([a, b]);
+    await insertTasks([a, b]);
 
-    const result = updateTask(b.id, "u1", { dependsOn: ["upd-cyc-a"] }, NOW);
+    const result = await updateTask(b.id, "u1", { dependsOn: ["upd-cyc-a"] }, NOW);
 
     expect(result).toEqual({ status: "cycle" });
-    expect(findTaskById(b.id)!.dependsOn).toEqual([]);
+    expect((await findTaskById(b.id))!.dependsOn).toEqual([]);
   });
 
-  it("accepts a valid dependsOn chain", () => {
+  it("accepts a valid dependsOn chain", async () => {
     const a = makeTask({ id: "upd-chain-a", listId: "chain-list" });
     const b = makeTask({ id: "upd-chain-b", listId: "chain-list" });
-    insertTasks([a, b]);
+    await insertTasks([a, b]);
 
-    const result = updateTask(b.id, "u1", { dependsOn: ["upd-chain-a"] }, NOW);
+    const result = await updateTask(b.id, "u1", { dependsOn: ["upd-chain-a"] }, NOW);
 
     expect(result.status).toBe("ok");
-    expect(findTaskById(b.id)!.dependsOn).toEqual(["upd-chain-a"]);
+    expect((await findTaskById(b.id))!.dependsOn).toEqual(["upd-chain-a"]);
   });
 
-  it("does not compute cascade updates when status is unchanged", () => {
+  it("does not compute cascade updates when status is unchanged", async () => {
     const task = makeTask({ id: "upd-no-cascade", status: "new" });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    const result = updateTask(task.id, "u1", { title: "New" }, NOW);
+    const result = await updateTask(task.id, "u1", { title: "New" }, NOW);
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
@@ -667,7 +667,7 @@ describe("updateTask", () => {
     }
   });
 
-  it("computes cascade updates for downstream dependents when status changes, via getCascadeUpdates", () => {
+  it("computes cascade updates for downstream dependents when status changes, via getCascadeUpdates", async () => {
     const blocker = makeTask({ id: "upd-casc-blocker", listId: "casc-list", status: "new" });
     const dependent = makeTask({
       id: "upd-casc-dependent",
@@ -676,9 +676,9 @@ describe("updateTask", () => {
       status: "new",
     });
     const independent = makeTask({ id: "upd-casc-independent", listId: "casc-list", status: "new" });
-    insertTasks([blocker, dependent, independent]);
+    await insertTasks([blocker, dependent, independent]);
 
-    const result = updateTask(blocker.id, "u1", { status: "done" }, NOW);
+    const result = await updateTask(blocker.id, "u1", { status: "done" }, NOW);
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
@@ -691,7 +691,7 @@ describe("updateTask", () => {
     }
   });
 
-  it("does not persist the cascade's recalculatedPriority/isBlocked back onto the downstream task", () => {
+  it("does not persist the cascade's recalculatedPriority/isBlocked back onto the downstream task", async () => {
     // getCascadeUpdates is deliberately pure derived state (see
     // widgets/task/task-detail.tsx's "cascade is informational only"
     // comment): Task.priority stays the user-set base value, and isBlocked
@@ -708,25 +708,25 @@ describe("updateTask", () => {
       priority: 2,
       deadline: "2026-08-01T00:00:00.000Z", // overdue relative to NOW, so calculatePriority applies a real boost
     });
-    insertTasks([blocker, dependent]);
+    await insertTasks([blocker, dependent]);
 
-    const result = updateTask(blocker.id, "u1", { status: "done" }, NOW);
+    const result = await updateTask(blocker.id, "u1", { status: "done" }, NOW);
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
       const dependentUpdate = result.cascade.find((update) => update.taskId === dependent.id)!;
       expect(dependentUpdate.recalculatedPriority).not.toBe(2);
     }
-    expect(findTaskById(dependent.id)!.priority).toBe(2);
+    expect((await findTaskById(dependent.id))!.priority).toBe(2);
   });
 
-  it("resolves a multi-level cascade chain", () => {
+  it("resolves a multi-level cascade chain", async () => {
     const a = makeTask({ id: "upd-chain2-a", listId: "chain2-list", status: "new" });
     const b = makeTask({ id: "upd-chain2-b", listId: "chain2-list", dependsOn: ["upd-chain2-a"], status: "new" });
     const c = makeTask({ id: "upd-chain2-c", listId: "chain2-list", dependsOn: ["upd-chain2-b"], status: "new" });
-    insertTasks([a, b, c]);
+    await insertTasks([a, b, c]);
 
-    const result = updateTask(a.id, "u1", { status: "done" }, NOW);
+    const result = await updateTask(a.id, "u1", { status: "done" }, NOW);
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
@@ -735,7 +735,7 @@ describe("updateTask", () => {
     }
   });
 
-  it("rejects completing a task blocked by an incomplete dependency, without persisting", () => {
+  it("rejects completing a task blocked by an incomplete dependency, without persisting", async () => {
     const blocker = makeTask({ id: "upd-block-blocker", listId: "block-list", status: "new" });
     const blocked = makeTask({
       id: "upd-block-target",
@@ -743,15 +743,15 @@ describe("updateTask", () => {
       dependsOn: ["upd-block-blocker"],
       status: "in_progress",
     });
-    insertTasks([blocker, blocked]);
+    await insertTasks([blocker, blocked]);
 
-    const result = updateTask(blocked.id, "u1", { status: "done" }, NOW);
+    const result = await updateTask(blocked.id, "u1", { status: "done" }, NOW);
 
     expect(result).toEqual({ status: "blocked" });
-    expect(findTaskById(blocked.id)!.status).toBe("in_progress");
+    expect((await findTaskById(blocked.id))!.status).toBe("in_progress");
   });
 
-  it("allows completing a task once its blocker is done", () => {
+  it("allows completing a task once its blocker is done", async () => {
     const blocker = makeTask({ id: "upd-unblock-blocker", listId: "unblock-list", status: "done" });
     const target = makeTask({
       id: "upd-unblock-target",
@@ -759,15 +759,15 @@ describe("updateTask", () => {
       dependsOn: ["upd-unblock-blocker"],
       status: "in_progress",
     });
-    insertTasks([blocker, target]);
+    await insertTasks([blocker, target]);
 
-    const result = updateTask(target.id, "u1", { status: "done" }, NOW);
+    const result = await updateTask(target.id, "u1", { status: "done" }, NOW);
 
     expect(result.status).toBe("ok");
-    expect(findTaskById(target.id)!.status).toBe("done");
+    expect((await findTaskById(target.id))!.status).toBe("done");
   });
 
-  it("rejects completing a task with multiple blockers when only one is incomplete", () => {
+  it("rejects completing a task with multiple blockers when only one is incomplete", async () => {
     const doneBlocker = makeTask({ id: "upd-multi-done", listId: "multi-list", status: "done" });
     const openBlocker = makeTask({ id: "upd-multi-open", listId: "multi-list", status: "new" });
     const target = makeTask({
@@ -776,15 +776,15 @@ describe("updateTask", () => {
       dependsOn: ["upd-multi-done", "upd-multi-open"],
       status: "in_progress",
     });
-    insertTasks([doneBlocker, openBlocker, target]);
+    await insertTasks([doneBlocker, openBlocker, target]);
 
-    const result = updateTask(target.id, "u1", { status: "done" }, NOW);
+    const result = await updateTask(target.id, "u1", { status: "done" }, NOW);
 
     expect(result).toEqual({ status: "blocked" });
-    expect(findTaskById(target.id)!.status).toBe("in_progress");
+    expect((await findTaskById(target.id))!.status).toBe("in_progress");
   });
 
-  it("allows completing a task whose only blocker was deleted", () => {
+  it("allows completing a task whose only blocker was deleted", async () => {
     const deletedBlocker = makeTask({
       id: "upd-deleted-blocker",
       listId: "deleted-blocker-list",
@@ -797,25 +797,25 @@ describe("updateTask", () => {
       dependsOn: ["upd-deleted-blocker"],
       status: "in_progress",
     });
-    insertTasks([deletedBlocker, target]);
+    await insertTasks([deletedBlocker, target]);
 
-    const result = updateTask(target.id, "u1", { status: "done" }, NOW);
+    const result = await updateTask(target.id, "u1", { status: "done" }, NOW);
 
     expect(result.status).toBe("ok");
-    expect(findTaskById(target.id)!.status).toBe("done");
+    expect((await findTaskById(target.id))!.status).toBe("done");
   });
 
-  it("allows completing a task with no dependencies", () => {
+  it("allows completing a task with no dependencies", async () => {
     const task = makeTask({ id: "upd-no-dep-target", listId: "no-dep-list", status: "in_progress" });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    const result = updateTask(task.id, "u1", { status: "done" }, NOW);
+    const result = await updateTask(task.id, "u1", { status: "done" }, NOW);
 
     expect(result.status).toBe("ok");
-    expect(findTaskById(task.id)!.status).toBe("done");
+    expect((await findTaskById(task.id))!.status).toBe("done");
   });
 
-  it("allows other status transitions on a blocked task (only completion is restricted)", () => {
+  it("allows other status transitions on a blocked task (only completion is restricted)", async () => {
     const blocker = makeTask({ id: "upd-block-move-blocker", listId: "block-move-list", status: "new" });
     const blocked = makeTask({
       id: "upd-block-move-target",
@@ -823,19 +823,19 @@ describe("updateTask", () => {
       dependsOn: ["upd-block-move-blocker"],
       status: "new",
     });
-    insertTasks([blocker, blocked]);
+    await insertTasks([blocker, blocked]);
 
-    const result = updateTask(blocked.id, "u1", { status: "in_progress" }, NOW);
+    const result = await updateTask(blocked.id, "u1", { status: "in_progress" }, NOW);
 
     expect(result.status).toBe("ok");
-    expect(findTaskById(blocked.id)!.status).toBe("in_progress");
+    expect((await findTaskById(blocked.id))!.status).toBe("in_progress");
   });
 
-  it("updates the source task itself correctly alongside the cascade", () => {
+  it("updates the source task itself correctly alongside the cascade", async () => {
     const task = makeTask({ id: "upd-source", status: "new" });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    const result = updateTask(task.id, "u1", { status: "done" }, NOW);
+    const result = await updateTask(task.id, "u1", { status: "done" }, NOW);
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
@@ -843,7 +843,7 @@ describe("updateTask", () => {
     }
   });
 
-  it("computes cascade priority using real history from completed same-category tasks, not a stub", () => {
+  it("computes cascade priority using real history from completed same-category tasks, not a stub", async () => {
     const blocker = makeTask({ id: "upd-hist-blocker", listId: "hist-list", status: "new" });
     const dependent = makeTask({
       id: "upd-hist-dependent",
@@ -861,9 +861,9 @@ describe("updateTask", () => {
       category: "Backend",
       timeSpentMin: 90,
     });
-    insertTasks([blocker, dependent, doneSimilar]);
+    await insertTasks([blocker, dependent, doneSimilar]);
 
-    const result = updateTask(blocker.id, "u1", { status: "done" }, NOW);
+    const result = await updateTask(blocker.id, "u1", { status: "done" }, NOW);
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
@@ -876,39 +876,39 @@ describe("updateTask", () => {
 describe("applyTaskExtension", () => {
   const NOW = new Date("2026-08-27T12:00:00.000Z");
 
-  it("returns not_found for an unknown task id", () => {
-    expect(applyTaskExtension("does-not-exist", "u1", { commentId: "c1", addedMin: 60 }, NOW)).toEqual({
+  it("returns not_found for an unknown task id", async () => {
+    expect(await applyTaskExtension("does-not-exist", "u1", { commentId: "c1", addedMin: 60 }, NOW)).toEqual({
       status: "not_found",
     });
   });
 
-  it("returns not_found for a soft-deleted task", () => {
+  it("returns not_found for a soft-deleted task", async () => {
     const task = makeTask({ id: "ext-deleted", deletedAt: "2026-08-01T00:00:00.000Z" });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    expect(applyTaskExtension(task.id, "u1", { commentId: "c1", addedMin: 60 }, NOW)).toEqual({
+    expect(await applyTaskExtension(task.id, "u1", { commentId: "c1", addedMin: 60 }, NOW)).toEqual({
       status: "not_found",
     });
   });
 
-  it("adds the extension minutes to estimatedMin", () => {
+  it("adds the extension minutes to estimatedMin", async () => {
     const task = makeTask({ id: "ext-add", estimatedMin: 90 });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    const result = applyTaskExtension(task.id, "u1", { commentId: "c1", addedMin: 60 }, NOW);
+    const result = await applyTaskExtension(task.id, "u1", { commentId: "c1", addedMin: 60 }, NOW);
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
       expect(result.task.estimatedMin).toBe(150);
     }
-    expect(findTaskById(task.id)!.estimatedMin).toBe(150);
+    expect((await findTaskById(task.id))!.estimatedMin).toBe(150);
   });
 
-  it("works when estimatedMin starts at 0", () => {
+  it("works when estimatedMin starts at 0", async () => {
     const task = makeTask({ id: "ext-zero", estimatedMin: 0 });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    const result = applyTaskExtension(task.id, "u1", { commentId: "c1", addedMin: 30 }, NOW);
+    const result = await applyTaskExtension(task.id, "u1", { commentId: "c1", addedMin: 30 }, NOW);
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
@@ -916,23 +916,23 @@ describe("applyTaskExtension", () => {
     }
   });
 
-  it("appends the extension record with commentId and addedMin", () => {
+  it("appends the extension record with commentId and addedMin", async () => {
     const task = makeTask({ id: "ext-record", estimatedMin: 0 });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    applyTaskExtension(task.id, "u1", { commentId: "c1", addedMin: 60 }, NOW);
+    await applyTaskExtension(task.id, "u1", { commentId: "c1", addedMin: 60 }, NOW);
 
-    expect(findTaskById(task.id)!.extensions).toEqual([{ commentId: "c1", addedMin: 60 }]);
+    expect((await findTaskById(task.id))!.extensions).toEqual([{ commentId: "c1", addedMin: 60 }]);
   });
 
-  it("accumulates extensions from independent calls", () => {
+  it("accumulates extensions from independent calls", async () => {
     const task = makeTask({ id: "ext-multi", estimatedMin: 0 });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    applyTaskExtension(task.id, "u1", { commentId: "c1", addedMin: 60 }, NOW);
-    applyTaskExtension(task.id, "u1", { commentId: "c2", addedMin: 30 }, NOW);
+    await applyTaskExtension(task.id, "u1", { commentId: "c1", addedMin: 60 }, NOW);
+    await applyTaskExtension(task.id, "u1", { commentId: "c2", addedMin: 30 }, NOW);
 
-    const stored = findTaskById(task.id)!;
+    const stored = (await findTaskById(task.id))!;
     expect(stored.estimatedMin).toBe(90);
     expect(stored.extensions).toEqual([
       { commentId: "c1", addedMin: 60 },
@@ -940,13 +940,13 @@ describe("applyTaskExtension", () => {
     ]);
   });
 
-  it("records an estimatedMin history entry with old/new values, byUserId, and timestamp", () => {
+  it("records an estimatedMin history entry with old/new values, byUserId, and timestamp", async () => {
     const task = makeTask({ id: "ext-history", estimatedMin: 10 });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    applyTaskExtension(task.id, "u1", { commentId: "c1", addedMin: 60 }, NOW);
+    await applyTaskExtension(task.id, "u1", { commentId: "c1", addedMin: 60 }, NOW);
 
-    expect(findTaskById(task.id)!.history).toEqual([
+    expect((await findTaskById(task.id))!.history).toEqual([
       { field: "estimatedMin", old: 10, new: 70, at: NOW.toISOString(), byUserId: "u1" },
     ]);
   });
@@ -955,15 +955,15 @@ describe("applyTaskExtension", () => {
 describe("deleteTask", () => {
   const NOW = new Date("2026-08-27T12:00:00.000Z");
 
-  it("returns not_found for an unknown task id", () => {
-    expect(deleteTask("does-not-exist", "u1", NOW)).toEqual({ status: "not_found" });
+  it("returns not_found for an unknown task id", async () => {
+    expect(await deleteTask("does-not-exist", "u1", NOW)).toEqual({ status: "not_found" });
   });
 
-  it("sets deletedAt on the task", () => {
+  it("sets deletedAt on the task", async () => {
     const task = makeTask({ id: "del-basic", deletedAt: null });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    const result = deleteTask(task.id, "u1", NOW);
+    const result = await deleteTask(task.id, "u1", NOW);
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
@@ -971,128 +971,128 @@ describe("deleteTask", () => {
     }
   });
 
-  it("keeps the task in the store rather than removing it (soft delete)", () => {
+  it("keeps the task in the store rather than removing it (soft delete)", async () => {
     const task = makeTask({ id: "del-persists", deletedAt: null });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    deleteTask(task.id, "u1", NOW);
+    await deleteTask(task.id, "u1", NOW);
 
-    expect(findTaskById(task.id)).toBeDefined();
-    expect(countTasks()).toBeGreaterThan(0);
+    expect(await findTaskById(task.id)).toBeDefined();
+    expect(await countTasks()).toBeGreaterThan(0);
   });
 
-  it("does not lose other fields when soft-deleting", () => {
+  it("does not lose other fields when soft-deleting", async () => {
     const task = makeTask({ id: "del-fields", title: "Keep me", priority: 4 });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    deleteTask(task.id, "u1", NOW);
+    await deleteTask(task.id, "u1", NOW);
 
-    const stored = findTaskById(task.id)!;
+    const stored = (await findTaskById(task.id))!;
     expect(stored.title).toBe("Keep me");
     expect(stored.priority).toBe(4);
   });
 
-  it("records a history entry for the deletion", () => {
+  it("records a history entry for the deletion", async () => {
     const task = makeTask({ id: "del-history", deletedAt: null });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    deleteTask(task.id, "u1", NOW);
+    await deleteTask(task.id, "u1", NOW);
 
-    expect(findTaskById(task.id)!.history).toEqual([
+    expect((await findTaskById(task.id))!.history).toEqual([
       { field: "deletedAt", old: null, new: NOW.toISOString(), at: NOW.toISOString(), byUserId: "u1" },
     ]);
   });
 
-  it("is idempotent: deleting an already-deleted task does not change deletedAt or add history", () => {
+  it("is idempotent: deleting an already-deleted task does not change deletedAt or add history", async () => {
     const firstDeletedAt = "2026-08-01T00:00:00.000Z";
     const task = makeTask({
       id: "del-repeat",
       deletedAt: firstDeletedAt,
       history: [{ field: "deletedAt", old: null, new: firstDeletedAt, at: firstDeletedAt, byUserId: "u1" }],
     });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    const result = deleteTask(task.id, "u2", NOW);
+    const result = await deleteTask(task.id, "u2", NOW);
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
       expect(result.task.deletedAt).toBe(firstDeletedAt);
     }
-    const stored = findTaskById(task.id)!;
+    const stored = (await findTaskById(task.id))!;
     expect(stored.deletedAt).toBe(firstDeletedAt);
     expect(stored.history).toEqual([
       { field: "deletedAt", old: null, new: firstDeletedAt, at: firstDeletedAt, byUserId: "u1" },
     ]);
   });
 
-  it("does not change other fields on a repeated delete", () => {
+  it("does not change other fields on a repeated delete", async () => {
     const task = makeTask({ id: "del-repeat-fields", deletedAt: "2026-08-01T00:00:00.000Z", title: "Original" });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    deleteTask(task.id, "u1", NOW);
+    await deleteTask(task.id, "u1", NOW);
 
-    expect(findTaskById(task.id)!.title).toBe("Original");
+    expect((await findTaskById(task.id))!.title).toBe("Original");
   });
 
-  it("removes a deleted child from its parent's subtaskIds", () => {
+  it("removes a deleted child from its parent's subtaskIds", async () => {
     const parent = makeTask({ id: "del-sync-parent", subtaskIds: ["del-sync-child"] });
     const child = makeTask({ id: "del-sync-child", parentId: "del-sync-parent" });
-    insertTasks([parent, child]);
+    await insertTasks([parent, child]);
 
-    deleteTask(child.id, "u1", NOW);
+    await deleteTask(child.id, "u1", NOW);
 
-    expect(findTaskById(parent.id)!.subtaskIds).toEqual([]);
+    expect((await findTaskById(parent.id))!.subtaskIds).toEqual([]);
   });
 
-  it("preserves the deleted child's own parentId so the link can be restored", () => {
+  it("preserves the deleted child's own parentId so the link can be restored", async () => {
     const parent = makeTask({ id: "del-sync-preserve-parent", subtaskIds: ["del-sync-preserve-child"] });
     const child = makeTask({ id: "del-sync-preserve-child", parentId: "del-sync-preserve-parent" });
-    insertTasks([parent, child]);
+    await insertTasks([parent, child]);
 
-    deleteTask(child.id, "u1", NOW);
+    await deleteTask(child.id, "u1", NOW);
 
-    expect(findTaskById(child.id)!.parentId).toBe("del-sync-preserve-parent");
+    expect((await findTaskById(child.id))!.parentId).toBe("del-sync-preserve-parent");
   });
 
-  it("leaves a deleted parent's subtaskIds and its children's parentId untouched", () => {
+  it("leaves a deleted parent's subtaskIds and its children's parentId untouched", async () => {
     const parent = makeTask({ id: "del-sync-parent-del", subtaskIds: ["del-sync-parent-del-child"] });
     const child = makeTask({ id: "del-sync-parent-del-child", parentId: "del-sync-parent-del" });
-    insertTasks([parent, child]);
+    await insertTasks([parent, child]);
 
-    deleteTask(parent.id, "u1", NOW);
+    await deleteTask(parent.id, "u1", NOW);
 
-    expect(findTaskById(parent.id)!.subtaskIds).toEqual(["del-sync-parent-del-child"]);
-    expect(findTaskById(child.id)!.parentId).toBe("del-sync-parent-del");
+    expect((await findTaskById(parent.id))!.subtaskIds).toEqual(["del-sync-parent-del-child"]);
+    expect((await findTaskById(child.id))!.parentId).toBe("del-sync-parent-del");
   });
 });
 
 describe("cloneTask", () => {
   const NOW = new Date("2026-08-27T12:00:00.000Z");
 
-  it("returns not_found for an unknown task id", () => {
-    expect(cloneTask("does-not-exist", NOW)).toEqual({ status: "not_found" });
+  it("returns not_found for an unknown task id", async () => {
+    expect(await cloneTask("does-not-exist", NOW)).toEqual({ status: "not_found" });
   });
 
-  it("returns deleted for a soft-deleted source task", () => {
+  it("returns deleted for a soft-deleted source task", async () => {
     const task = makeTask({ id: "clone-deleted", deletedAt: "2026-08-01T00:00:00.000Z" });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    expect(cloneTask(task.id, NOW)).toEqual({ status: "deleted" });
+    expect(await cloneTask(task.id, NOW)).toEqual({ status: "deleted" });
   });
 
-  it("does not persist anything for a soft-deleted source task", () => {
+  it("does not persist anything for a soft-deleted source task", async () => {
     const task = makeTask({ id: "clone-deleted-noop" });
-    insertTasks([{ ...task, deletedAt: "2026-08-01T00:00:00.000Z" }]);
-    const before = countTasks();
+    await insertTasks([{ ...task, deletedAt: "2026-08-01T00:00:00.000Z" }]);
+    const before = await countTasks();
 
-    cloneTask(task.id, NOW);
+    await cloneTask(task.id, NOW);
 
-    expect(countTasks()).toBe(before);
+    expect(await countTasks()).toBe(before);
   });
 
-  it("creates a new task with a different id", () => {
-    const list = createList("u1", { title: "Clone list", template: "work", deadline: null });
-    const source = createTask({
+  it("creates a new task with a different id", async () => {
+    const list = await createList("u1", { title: "Clone list", template: "work", deadline: null });
+    const source = await createTask({
       listId: list.id,
       title: "Source",
       description: "",
@@ -1104,7 +1104,7 @@ describe("cloneTask", () => {
       estimatedMin: 0,
     });
 
-    const result = cloneTask(source.id, NOW);
+    const result = await cloneTask(source.id, NOW);
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
@@ -1112,9 +1112,9 @@ describe("cloneTask", () => {
     }
   });
 
-  it("does not mutate the source task", () => {
-    const list = createList("u1", { title: "Clone list", template: "work", deadline: null });
-    const source = createTask({
+  it("does not mutate the source task", async () => {
+    const list = await createList("u1", { title: "Clone list", template: "work", deadline: null });
+    const source = await createTask({
       listId: list.id,
       title: "Source",
       description: "desc",
@@ -1125,16 +1125,16 @@ describe("cloneTask", () => {
       deadline: null,
       estimatedMin: 30,
     });
-    const snapshot = { ...findTaskById(source.id)! };
+    const snapshot = { ...(await findTaskById(source.id))! };
 
-    cloneTask(source.id, NOW);
+    await cloneTask(source.id, NOW);
 
-    expect(findTaskById(source.id)).toEqual(snapshot);
+    expect(await findTaskById(source.id)).toEqual(snapshot);
   });
 
-  it("copies title, description, priority, category, tags, status, deadline, and estimatedMin", () => {
-    const list = createList("u1", { title: "Clone list", template: "work", deadline: null });
-    const source = createTask({
+  it("copies title, description, priority, category, tags, status, deadline, and estimatedMin", async () => {
+    const list = await createList("u1", { title: "Clone list", template: "work", deadline: null });
+    const source = await createTask({
       listId: list.id,
       title: "Source title",
       description: "Source description",
@@ -1146,7 +1146,7 @@ describe("cloneTask", () => {
       estimatedMin: 120,
     });
 
-    const result = cloneTask(source.id, NOW);
+    const result = await cloneTask(source.id, NOW);
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
@@ -1161,9 +1161,9 @@ describe("cloneTask", () => {
     }
   });
 
-  it("keeps the clone in the same list as the source", () => {
-    const list = createList("u1", { title: "Clone list", template: "work", deadline: null });
-    const source = createTask({
+  it("keeps the clone in the same list as the source", async () => {
+    const list = await createList("u1", { title: "Clone list", template: "work", deadline: null });
+    const source = await createTask({
       listId: list.id,
       title: "Source",
       description: "",
@@ -1175,7 +1175,7 @@ describe("cloneTask", () => {
       estimatedMin: 0,
     });
 
-    const result = cloneTask(source.id, NOW);
+    const result = await cloneTask(source.id, NOW);
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
@@ -1183,9 +1183,9 @@ describe("cloneTask", () => {
     }
   });
 
-  it("adds the clone id to the list's taskIds", () => {
-    const list = createList("u1", { title: "Clone list", template: "work", deadline: null });
-    const source = createTask({
+  it("adds the clone id to the list's taskIds", async () => {
+    const list = await createList("u1", { title: "Clone list", template: "work", deadline: null });
+    const source = await createTask({
       listId: list.id,
       title: "Source",
       description: "",
@@ -1197,17 +1197,17 @@ describe("cloneTask", () => {
       estimatedMin: 0,
     });
 
-    const result = cloneTask(source.id, NOW);
+    const result = await cloneTask(source.id, NOW);
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
-      expect(findListById(list.id)!.taskIds).toContain(result.task.id);
+      expect((await findListById(list.id))!.taskIds).toContain(result.task.id);
     }
   });
 
-  it("assigns a new code that does not collide with the source's code", () => {
-    const list = createList("u1", { title: "Clone list", template: "work", deadline: null });
-    const source = createTask({
+  it("assigns a new code that does not collide with the source's code", async () => {
+    const list = await createList("u1", { title: "Clone list", template: "work", deadline: null });
+    const source = await createTask({
       listId: list.id,
       title: "Source",
       description: "",
@@ -1219,7 +1219,7 @@ describe("cloneTask", () => {
       estimatedMin: 0,
     });
 
-    const result = cloneTask(source.id, NOW);
+    const result = await cloneTask(source.id, NOW);
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
@@ -1227,9 +1227,9 @@ describe("cloneTask", () => {
     }
   });
 
-  it("resets runtime timer state on the clone", () => {
-    const list = createList("u1", { title: "Clone list", template: "work", deadline: null });
-    const source = createTask({
+  it("resets runtime timer state on the clone", async () => {
+    const list = await createList("u1", { title: "Clone list", template: "work", deadline: null });
+    const source = await createTask({
       listId: list.id,
       title: "Source",
       description: "",
@@ -1240,9 +1240,9 @@ describe("cloneTask", () => {
       deadline: null,
       estimatedMin: 0,
     });
-    insertTasks([
+    await insertTasks([
       {
-        ...findTaskById(source.id)!,
+        ...(await findTaskById(source.id))!,
         timeSpentMin: 90,
         timerStartedAt: "2026-08-27T10:00:00.000Z",
         timerPausedAt: "2026-08-27T11:00:00.000Z",
@@ -1250,7 +1250,7 @@ describe("cloneTask", () => {
       },
     ]);
 
-    const result = cloneTask(source.id, NOW);
+    const result = await cloneTask(source.id, NOW);
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
@@ -1261,9 +1261,9 @@ describe("cloneTask", () => {
     }
   });
 
-  it("resets history to an empty array on the clone", () => {
-    const list = createList("u1", { title: "Clone list", template: "work", deadline: null });
-    const source = createTask({
+  it("resets history to an empty array on the clone", async () => {
+    const list = await createList("u1", { title: "Clone list", template: "work", deadline: null });
+    const source = await createTask({
       listId: list.id,
       title: "Source",
       description: "",
@@ -1274,9 +1274,9 @@ describe("cloneTask", () => {
       deadline: null,
       estimatedMin: 0,
     });
-    updateTask(source.id, "u1", { title: "Renamed" }, NOW);
+    await updateTask(source.id, "u1", { title: "Renamed" }, NOW);
 
-    const result = cloneTask(source.id, NOW);
+    const result = await cloneTask(source.id, NOW);
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
@@ -1284,9 +1284,9 @@ describe("cloneTask", () => {
     }
   });
 
-  it("sets a fresh createdAt and a null deletedAt on the clone", () => {
-    const list = createList("u1", { title: "Clone list", template: "work", deadline: null });
-    const source = createTask({
+  it("sets a fresh createdAt and a null deletedAt on the clone", async () => {
+    const list = await createList("u1", { title: "Clone list", template: "work", deadline: null });
+    const source = await createTask({
       listId: list.id,
       title: "Source",
       description: "",
@@ -1298,7 +1298,7 @@ describe("cloneTask", () => {
       estimatedMin: 0,
     });
 
-    const result = cloneTask(source.id, NOW);
+    const result = await cloneTask(source.id, NOW);
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
@@ -1307,9 +1307,9 @@ describe("cloneTask", () => {
     }
   });
 
-  it("drops dependsOn references since the referenced tasks are not part of the clone", () => {
-    const list = createList("u1", { title: "Clone list", template: "work", deadline: null });
-    const blocker = createTask({
+  it("drops dependsOn references since the referenced tasks are not part of the clone", async () => {
+    const list = await createList("u1", { title: "Clone list", template: "work", deadline: null });
+    const blocker = await createTask({
       listId: list.id,
       title: "Blocker",
       description: "",
@@ -1320,7 +1320,7 @@ describe("cloneTask", () => {
       deadline: null,
       estimatedMin: 0,
     });
-    const source = createTask({
+    const source = await createTask({
       listId: list.id,
       title: "Source",
       description: "",
@@ -1331,9 +1331,9 @@ describe("cloneTask", () => {
       deadline: null,
       estimatedMin: 0,
     });
-    insertTasks([{ ...findTaskById(source.id)!, dependsOn: [blocker.id] }]);
+    await insertTasks([{ ...(await findTaskById(source.id))!, dependsOn: [blocker.id] }]);
 
-    const result = cloneTask(source.id, NOW);
+    const result = await cloneTask(source.id, NOW);
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
@@ -1341,9 +1341,9 @@ describe("cloneTask", () => {
     }
   });
 
-  it("drops parentId and subtaskIds references not part of the clone", () => {
-    const list = createList("u1", { title: "Clone list", template: "work", deadline: null });
-    const parent = createTask({
+  it("drops parentId and subtaskIds references not part of the clone", async () => {
+    const list = await createList("u1", { title: "Clone list", template: "work", deadline: null });
+    const parent = await createTask({
       listId: list.id,
       title: "Parent",
       description: "",
@@ -1354,7 +1354,7 @@ describe("cloneTask", () => {
       deadline: null,
       estimatedMin: 0,
     });
-    const child = createTask({
+    const child = await createTask({
       listId: list.id,
       title: "Child",
       description: "",
@@ -1365,7 +1365,7 @@ describe("cloneTask", () => {
       deadline: null,
       estimatedMin: 0,
     });
-    const source = createTask({
+    const source = await createTask({
       listId: list.id,
       title: "Source",
       description: "",
@@ -1376,9 +1376,9 @@ describe("cloneTask", () => {
       deadline: null,
       estimatedMin: 0,
     });
-    insertTasks([{ ...findTaskById(source.id)!, parentId: parent.id, subtaskIds: [child.id] }]);
+    await insertTasks([{ ...(await findTaskById(source.id))!, parentId: parent.id, subtaskIds: [child.id] }]);
 
-    const result = cloneTask(source.id, NOW);
+    const result = await cloneTask(source.id, NOW);
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
@@ -1387,9 +1387,9 @@ describe("cloneTask", () => {
     }
   });
 
-  it("persists the clone so it can be found by id", () => {
-    const list = createList("u1", { title: "Clone list", template: "work", deadline: null });
-    const source = createTask({
+  it("persists the clone so it can be found by id", async () => {
+    const list = await createList("u1", { title: "Clone list", template: "work", deadline: null });
+    const source = await createTask({
       listId: list.id,
       title: "Source",
       description: "",
@@ -1401,17 +1401,17 @@ describe("cloneTask", () => {
       estimatedMin: 0,
     });
 
-    const result = cloneTask(source.id, NOW);
+    const result = await cloneTask(source.id, NOW);
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
-      expect(findTaskById(result.task.id)).toEqual(result.task);
+      expect(await findTaskById(result.task.id)).toEqual(result.task);
     }
   });
 
-  it("creates a separate new task with a different id on a repeated clone", () => {
-    const list = createList("u1", { title: "Clone list", template: "work", deadline: null });
-    const source = createTask({
+  it("creates a separate new task with a different id on a repeated clone", async () => {
+    const list = await createList("u1", { title: "Clone list", template: "work", deadline: null });
+    const source = await createTask({
       listId: list.id,
       title: "Source",
       description: "",
@@ -1423,8 +1423,8 @@ describe("cloneTask", () => {
       estimatedMin: 0,
     });
 
-    const first = cloneTask(source.id, NOW);
-    const second = cloneTask(source.id, NOW);
+    const first = await cloneTask(source.id, NOW);
+    const second = await cloneTask(source.id, NOW);
 
     expect(first.status).toBe("ok");
     expect(second.status).toBe("ok");
@@ -1438,69 +1438,69 @@ describe("cloneTask", () => {
 describe("restoreTask", () => {
   const NOW = new Date("2026-08-27T12:00:00.000Z");
 
-  it("returns not_found for an unknown task id", () => {
-    expect(restoreTask("does-not-exist", "u1", NOW)).toEqual({ status: "not_found" });
+  it("returns not_found for an unknown task id", async () => {
+    expect(await restoreTask("does-not-exist", "u1", NOW)).toEqual({ status: "not_found" });
   });
 
-  it("clears deletedAt when restored within the 30-day window", () => {
+  it("clears deletedAt when restored within the 30-day window", async () => {
     const task = makeTask({ id: "res-basic", deletedAt: "2026-08-01T00:00:00.000Z" });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    const result = restoreTask(task.id, "u1", NOW);
+    const result = await restoreTask(task.id, "u1", NOW);
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
       expect(result.task.deletedAt).toBeNull();
     }
-    expect(findTaskById(task.id)!.deletedAt).toBeNull();
+    expect((await findTaskById(task.id))!.deletedAt).toBeNull();
   });
 
-  it("returns expired and leaves the task deleted when the restore window has passed", () => {
+  it("returns expired and leaves the task deleted when the restore window has passed", async () => {
     const deletedAt = "2026-01-01T00:00:00.000Z";
     const task = makeTask({ id: "res-expired", deletedAt });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    const result = restoreTask(task.id, "u1", NOW);
+    const result = await restoreTask(task.id, "u1", NOW);
 
     expect(result).toEqual({ status: "expired" });
-    expect(findTaskById(task.id)!.deletedAt).toBe(deletedAt);
+    expect((await findTaskById(task.id))!.deletedAt).toBe(deletedAt);
   });
 
-  it("is idempotent: restoring a task that is not deleted returns ok without changing history", () => {
+  it("is idempotent: restoring a task that is not deleted returns ok without changing history", async () => {
     const task = makeTask({ id: "res-already", deletedAt: null });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    const result = restoreTask(task.id, "u1", NOW);
+    const result = await restoreTask(task.id, "u1", NOW);
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
       expect(result.task).toEqual(task);
     }
-    expect(findTaskById(task.id)!.history).toEqual([]);
+    expect((await findTaskById(task.id))!.history).toEqual([]);
   });
 
-  it("records a history entry describing deletedAt moving back to null", () => {
+  it("records a history entry describing deletedAt moving back to null", async () => {
     const deletedAt = "2026-08-01T00:00:00.000Z";
     const task = makeTask({ id: "res-history", deletedAt });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    restoreTask(task.id, "u1", NOW);
+    await restoreTask(task.id, "u1", NOW);
 
-    expect(findTaskById(task.id)!.history).toEqual([
+    expect((await findTaskById(task.id))!.history).toEqual([
       { field: "deletedAt", old: deletedAt, new: null, at: NOW.toISOString(), byUserId: "u1" },
     ]);
   });
 
-  it("does not add a history entry on an already-restored task", () => {
+  it("does not add a history entry on an already-restored task", async () => {
     const task = makeTask({ id: "res-noop-history", deletedAt: null });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    restoreTask(task.id, "u1", NOW);
+    await restoreTask(task.id, "u1", NOW);
 
-    expect(findTaskById(task.id)!.history).toEqual([]);
+    expect((await findTaskById(task.id))!.history).toEqual([]);
   });
 
-  it("preserves dependsOn, parentId, and subtaskIds when restoring", () => {
+  it("preserves dependsOn, parentId, and subtaskIds when restoring", async () => {
     const task = makeTask({
       id: "res-refs",
       deletedAt: "2026-08-01T00:00:00.000Z",
@@ -1508,61 +1508,61 @@ describe("restoreTask", () => {
       parentId: "parent-1",
       subtaskIds: ["child-1", "child-2"],
     });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    restoreTask(task.id, "u1", NOW);
+    await restoreTask(task.id, "u1", NOW);
 
-    const stored = findTaskById(task.id)!;
+    const stored = (await findTaskById(task.id))!;
     expect(stored.dependsOn).toEqual(["other-1"]);
     expect(stored.parentId).toBe("parent-1");
     expect(stored.subtaskIds).toEqual(["child-1", "child-2"]);
   });
 
-  it("does not lose other fields when restoring", () => {
+  it("does not lose other fields when restoring", async () => {
     const task = makeTask({
       id: "res-fields",
       deletedAt: "2026-08-01T00:00:00.000Z",
       title: "Keep me",
       priority: 4,
     });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    restoreTask(task.id, "u1", NOW);
+    await restoreTask(task.id, "u1", NOW);
 
-    const stored = findTaskById(task.id)!;
+    const stored = (await findTaskById(task.id))!;
     expect(stored.title).toBe("Keep me");
     expect(stored.priority).toBe(4);
   });
 
-  it("re-adds a restored child to its still-active parent's subtaskIds", () => {
+  it("re-adds a restored child to its still-active parent's subtaskIds", async () => {
     const parent = makeTask({ id: "res-sync-parent", subtaskIds: [] });
     const child = makeTask({
       id: "res-sync-child",
       parentId: "res-sync-parent",
       deletedAt: "2026-08-01T00:00:00.000Z",
     });
-    insertTasks([parent, child]);
+    await insertTasks([parent, child]);
 
-    restoreTask(child.id, "u1", NOW);
+    await restoreTask(child.id, "u1", NOW);
 
-    expect(findTaskById(parent.id)!.subtaskIds).toEqual(["res-sync-child"]);
+    expect((await findTaskById(parent.id))!.subtaskIds).toEqual(["res-sync-child"]);
   });
 
-  it("does not duplicate the child id if the parent's subtaskIds already contains it", () => {
+  it("does not duplicate the child id if the parent's subtaskIds already contains it", async () => {
     const parent = makeTask({ id: "res-sync-dup-parent", subtaskIds: ["res-sync-dup-child"] });
     const child = makeTask({
       id: "res-sync-dup-child",
       parentId: "res-sync-dup-parent",
       deletedAt: "2026-08-01T00:00:00.000Z",
     });
-    insertTasks([parent, child]);
+    await insertTasks([parent, child]);
 
-    restoreTask(child.id, "u1", NOW);
+    await restoreTask(child.id, "u1", NOW);
 
-    expect(findTaskById(parent.id)!.subtaskIds).toEqual(["res-sync-dup-child"]);
+    expect((await findTaskById(parent.id))!.subtaskIds).toEqual(["res-sync-dup-child"]);
   });
 
-  it("does not re-add the child to a parent that is itself soft-deleted", () => {
+  it("does not re-add the child to a parent that is itself soft-deleted", async () => {
     const parent = makeTask({
       id: "res-sync-deleted-parent",
       subtaskIds: [],
@@ -1573,28 +1573,28 @@ describe("restoreTask", () => {
       parentId: "res-sync-deleted-parent",
       deletedAt: "2026-08-01T00:00:00.000Z",
     });
-    insertTasks([parent, child]);
+    await insertTasks([parent, child]);
 
-    restoreTask(child.id, "u1", NOW);
+    await restoreTask(child.id, "u1", NOW);
 
-    expect(findTaskById(parent.id)!.deletedAt).not.toBeNull();
-    expect(findTaskById(parent.id)!.subtaskIds).toEqual([]);
+    expect((await findTaskById(parent.id))!.deletedAt).not.toBeNull();
+    expect((await findTaskById(parent.id))!.subtaskIds).toEqual([]);
   });
 
-  it("does not crash restoring a child whose parent no longer exists", () => {
+  it("does not crash restoring a child whose parent no longer exists", async () => {
     const child = makeTask({
       id: "res-sync-missing-parent-child",
       parentId: "does-not-exist",
       deletedAt: "2026-08-01T00:00:00.000Z",
     });
-    insertTasks([child]);
+    await insertTasks([child]);
 
-    const result = restoreTask(child.id, "u1", NOW);
+    const result = await restoreTask(child.id, "u1", NOW);
 
     expect(result.status).toBe("ok");
   });
 
-  it("does not write a foreign-list parent's subtaskIds on restore (legacy cross-list parentId)", () => {
+  it("does not write a foreign-list parent's subtaskIds on restore (legacy cross-list parentId)", async () => {
     const parent = makeTask({ id: "res-idor-parent", listId: "list-b", subtaskIds: [] });
     const child = makeTask({
       id: "res-idor-child",
@@ -1602,26 +1602,26 @@ describe("restoreTask", () => {
       parentId: "res-idor-parent",
       deletedAt: "2026-08-01T00:00:00.000Z",
     });
-    insertTasks([parent, child]);
+    await insertTasks([parent, child]);
 
-    restoreTask(child.id, "u1", NOW);
+    await restoreTask(child.id, "u1", NOW);
 
-    expect(findTaskById(parent.id)!.subtaskIds).toEqual([]);
-    expect(findTaskById(child.id)!.parentId).toBe("res-idor-parent");
+    expect((await findTaskById(parent.id))!.subtaskIds).toEqual([]);
+    expect((await findTaskById(child.id))!.parentId).toBe("res-idor-parent");
   });
 
-  it("does not write a foreign-list parent's subtaskIds on delete (legacy cross-list parentId)", () => {
+  it("does not write a foreign-list parent's subtaskIds on delete (legacy cross-list parentId)", async () => {
     const parent = makeTask({ id: "del-idor-parent", listId: "list-b", subtaskIds: ["del-idor-child"] });
     const child = makeTask({
       id: "del-idor-child",
       listId: "list-a",
       parentId: "del-idor-parent",
     });
-    insertTasks([parent, child]);
+    await insertTasks([parent, child]);
 
-    deleteTask(child.id, "u1", NOW);
+    await deleteTask(child.id, "u1", NOW);
 
-    expect(findTaskById(parent.id)!.subtaskIds).toEqual(["del-idor-child"]);
+    expect((await findTaskById(parent.id))!.subtaskIds).toEqual(["del-idor-child"]);
   });
 });
 
@@ -1630,7 +1630,7 @@ describe("rollbackTask", () => {
   const T1 = "2026-08-10T10:00:00.000Z";
   const T2 = "2026-08-11T10:00:00.000Z";
 
-  it("restores updatable fields from the selected history index", () => {
+  it("restores updatable fields from the selected history index", async () => {
     const task = makeTask({
       id: "rb-restore",
       title: "C",
@@ -1641,17 +1641,17 @@ describe("rollbackTask", () => {
         { field: "priority", old: 3, new: 5, at: T2, byUserId: "u1" },
       ],
     });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    const result = rollbackTask(task.id, "u1", 0, NOW);
+    const result = await rollbackTask(task.id, "u1", 0, NOW);
 
     expect(result.status).toBe("ok");
-    const stored = findTaskById(task.id)!;
+    const stored = (await findTaskById(task.id))!;
     expect(stored.title).toBe("A");
     expect(stored.priority).toBe(3);
   });
 
-  it("keeps identity, createdAt, runtime timer fields, and deletedAt unchanged", () => {
+  it("keeps identity, createdAt, runtime timer fields, and deletedAt unchanged", async () => {
     const task = makeTask({
       id: "rb-identity",
       listId: "rb-list",
@@ -1664,11 +1664,11 @@ describe("rollbackTask", () => {
       deletedAt: null,
       history: [{ field: "title", old: "A", new: "B", at: T1, byUserId: "u1" }],
     });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    rollbackTask(task.id, "u1", 0, NOW);
+    await rollbackTask(task.id, "u1", 0, NOW);
 
-    const stored = findTaskById(task.id)!;
+    const stored = (await findTaskById(task.id))!;
     expect(stored.id).toBe("rb-identity");
     expect(stored.code).toBe("TEST-9");
     expect(stored.listId).toBe("rb-list");
@@ -1679,14 +1679,14 @@ describe("rollbackTask", () => {
     expect(stored.deletedAt).toBeNull();
   });
 
-  it("appends a new history entry and keeps previous entries", () => {
+  it("appends a new history entry and keeps previous entries", async () => {
     const previous = [{ field: "title", old: "A", new: "B", at: T1, byUserId: "u1" }];
     const task = makeTask({ id: "rb-history", title: "B", history: previous });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    rollbackTask(task.id, "u1", 0, NOW);
+    await rollbackTask(task.id, "u1", 0, NOW);
 
-    const stored = findTaskById(task.id)!;
+    const stored = (await findTaskById(task.id))!;
     expect(stored.history[0]).toEqual(previous[0]);
     expect(stored.history).toContainEqual({
       field: "title",
@@ -1697,20 +1697,20 @@ describe("rollbackTask", () => {
     });
   });
 
-  it("rejects an unknown history index without changing the task", () => {
+  it("rejects an unknown history index without changing the task", async () => {
     const task = makeTask({
       id: "rb-unknown",
       title: "B",
       history: [{ field: "title", old: "A", new: "B", at: T1, byUserId: "u1" }],
     });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    expect(rollbackTask(task.id, "u1", 9, NOW)).toEqual({ status: "unknown_version" });
-    expect(findTaskById(task.id)!.title).toBe("B");
-    expect(findTaskById(task.id)!.history).toHaveLength(1);
+    expect(await rollbackTask(task.id, "u1", 9, NOW)).toEqual({ status: "unknown_version" });
+    expect((await findTaskById(task.id))!.title).toBe("B");
+    expect((await findTaskById(task.id))!.history).toHaveLength(1);
   });
 
-  it("syncs parent subtaskIds when rolling back parentId", () => {
+  it("syncs parent subtaskIds when rolling back parentId", async () => {
     const parent = makeTask({ id: "rb-parent", listId: "rb-parent-list", subtaskIds: ["rb-child"] });
     const child = makeTask({
       id: "rb-child",
@@ -1718,16 +1718,16 @@ describe("rollbackTask", () => {
       parentId: "rb-parent",
       history: [{ field: "parentId", old: null, new: "rb-parent", at: T1, byUserId: "u1" }],
     });
-    insertTasks([parent, child]);
+    await insertTasks([parent, child]);
 
-    const result = rollbackTask(child.id, "u1", 0, NOW);
+    const result = await rollbackTask(child.id, "u1", 0, NOW);
 
     expect(result.status).toBe("ok");
-    expect(findTaskById(child.id)!.parentId).toBeNull();
-    expect(findTaskById(parent.id)!.subtaskIds).toEqual([]);
+    expect((await findTaskById(child.id))!.parentId).toBeNull();
+    expect((await findTaskById(parent.id))!.subtaskIds).toEqual([]);
   });
 
-  it("rejects a restored parentId that is now invalid, without partial writes", () => {
+  it("rejects a restored parentId that is now invalid, without partial writes", async () => {
     const otherListParent = makeTask({ id: "rb-other-parent", listId: "other-list" });
     const child = makeTask({
       id: "rb-invalid-parent-child",
@@ -1735,14 +1735,14 @@ describe("rollbackTask", () => {
       parentId: null,
       history: [{ field: "parentId", old: "rb-other-parent", new: null, at: T1, byUserId: "u1" }],
     });
-    insertTasks([otherListParent, child]);
+    await insertTasks([otherListParent, child]);
 
-    expect(rollbackTask(child.id, "u1", 0, NOW)).toEqual({ status: "invalid_parent" });
-    expect(findTaskById(child.id)!.parentId).toBeNull();
-    expect(findTaskById(child.id)!.history).toHaveLength(1);
+    expect(await rollbackTask(child.id, "u1", 0, NOW)).toEqual({ status: "invalid_parent" });
+    expect((await findTaskById(child.id))!.parentId).toBeNull();
+    expect((await findTaskById(child.id))!.history).toHaveLength(1);
   });
 
-  it("rejects a restored dependsOn that would create a cycle, without persisting", () => {
+  it("rejects a restored dependsOn that would create a cycle, without persisting", async () => {
     const a = makeTask({
       id: "rb-dep-a",
       listId: "rb-dep-list",
@@ -1754,13 +1754,13 @@ describe("rollbackTask", () => {
       dependsOn: [],
       history: [{ field: "dependsOn", old: ["rb-dep-a"], new: [], at: T1, byUserId: "u1" }],
     });
-    insertTasks([a, b]);
+    await insertTasks([a, b]);
 
-    expect(rollbackTask(b.id, "u1", 0, NOW)).toEqual({ status: "cycle" });
-    expect(findTaskById(b.id)!.dependsOn).toEqual([]);
+    expect(await rollbackTask(b.id, "u1", 0, NOW)).toEqual({ status: "cycle" });
+    expect((await findTaskById(b.id))!.dependsOn).toEqual([]);
   });
 
-  it("rejects a restored dependsOn that points at another list, without persisting", () => {
+  it("rejects a restored dependsOn that points at another list, without persisting", async () => {
     const foreign = makeTask({ id: "rb-dep-foreign", listId: "other-list" });
     const task = makeTask({
       id: "rb-dep-local",
@@ -1768,20 +1768,20 @@ describe("rollbackTask", () => {
       dependsOn: [],
       history: [{ field: "dependsOn", old: ["rb-dep-foreign"], new: [], at: T1, byUserId: "u1" }],
     });
-    insertTasks([foreign, task]);
+    await insertTasks([foreign, task]);
 
-    expect(rollbackTask(task.id, "u1", 0, NOW)).toEqual({ status: "invalid_dependsOn" });
-    expect(findTaskById(task.id)!.dependsOn).toEqual([]);
+    expect(await rollbackTask(task.id, "u1", 0, NOW)).toEqual({ status: "invalid_dependsOn" });
+    expect((await findTaskById(task.id))!.dependsOn).toEqual([]);
   });
 
-  it("returns not_found for a soft-deleted task", () => {
+  it("returns not_found for a soft-deleted task", async () => {
     const task = makeTask({
       id: "rb-deleted",
       deletedAt: T1,
       history: [{ field: "title", old: "A", new: "B", at: T1, byUserId: "u1" }],
     });
-    insertTasks([task]);
+    await insertTasks([task]);
 
-    expect(rollbackTask(task.id, "u1", 0, NOW)).toEqual({ status: "not_found" });
+    expect(await rollbackTask(task.id, "u1", 0, NOW)).toEqual({ status: "not_found" });
   });
 });

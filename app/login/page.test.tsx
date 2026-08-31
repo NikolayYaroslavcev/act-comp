@@ -28,7 +28,7 @@ function cookieJar(sessionId?: string) {
   };
 }
 
-function searchParams(redirect?: string) {
+async function searchParams(redirect?: string) {
   return Promise.resolve({ redirect });
 }
 
@@ -72,7 +72,7 @@ describe("LoginPage — anonymous visitor", () => {
 
 describe("LoginPage — already-authenticated visitor", () => {
   it("redirects to the default authenticated route instead of showing the form", async () => {
-    const session = createSession({
+    const session = await createSession({
       userId: "u1",
       ip: "192.0.2.5 (demo)",
       device: "Chrome on Windows",
@@ -86,7 +86,7 @@ describe("LoginPage — already-authenticated visitor", () => {
   });
 
   it("redirects to a valid internal redirect target instead of showing the form", async () => {
-    const session = createSession({
+    const session = await createSession({
       userId: "u1",
       ip: "192.0.2.5 (demo)",
       device: "Chrome on Windows",

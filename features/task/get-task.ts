@@ -5,13 +5,13 @@ import type { Task } from "@/entities/task/schema";
 
 export type GetTaskOutcome = { status: "not_found" } | { status: "ok"; task: Task };
 
-export function getVisibleTask(userId: string, taskId: string): GetTaskOutcome {
-  const task = findTaskById(taskId);
+export async function getVisibleTask(userId: string, taskId: string): Promise<GetTaskOutcome> {
+  const task = await findTaskById(taskId);
   if (!task || task.deletedAt !== null) {
     return { status: "not_found" };
   }
 
-  const list = findListById(task.listId);
+  const list = await findListById(task.listId);
   if (!list || list.deletedAt !== null || !canViewList(list, userId)) {
     return { status: "not_found" };
   }

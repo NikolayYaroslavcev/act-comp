@@ -14,16 +14,16 @@ function fileRequest(taskId: string, fileId: string, sessionId: string | undefin
   });
 }
 
-function callGet(taskId: string, fileId: string, request: NextRequest) {
-  return GET(request, { params: Promise.resolve({ id: taskId, fileId }) });
+async function callGet(taskId: string, fileId: string, request: NextRequest) {
+  return await GET(request, { params: Promise.resolve({ id: taskId, fileId }) });
 }
 
-function callDelete(taskId: string, fileId: string, request: NextRequest) {
-  return DELETE(request, { params: Promise.resolve({ id: taskId, fileId }) });
+async function callDelete(taskId: string, fileId: string, request: NextRequest) {
+  return await DELETE(request, { params: Promise.resolve({ id: taskId, fileId }) });
 }
 
-function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
-  return createSession({
+async function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
+  return await createSession({
     userId,
     ip: `192.0.2.${suffix} (demo)`,
     device: "Chrome on Windows",
@@ -31,8 +31,8 @@ function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
   });
 }
 
-function makeTaskIn(listId: string) {
-  return createTask({
+async function makeTaskIn(listId: string) {
+  return await createTask({
     listId,
     title: "Task",
     description: "",
@@ -47,9 +47,9 @@ function makeTaskIn(listId: string) {
 
 describe("GET /api/tasks/[id]/files/[fileId]", () => {
   it("returns 401 when no session cookie is present", async () => {
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    const attachment = createAttachment({
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    const attachment = await createAttachment({
       taskId: task.id,
       uploadedBy: "u1",
       filename: "a.txt",
@@ -63,10 +63,10 @@ describe("GET /api/tasks/[id]/files/[fileId]", () => {
   });
 
   it("returns the exact bytes with the correct content type and filename for the owner", async () => {
-    const session = sessionFor("u1", "500");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    const attachment = createAttachment({
+    const session = await sessionFor("u1", "500");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    const attachment = await createAttachment({
       taskId: task.id,
       uploadedBy: "u1",
       filename: "report.pdf",
@@ -85,10 +85,10 @@ describe("GET /api/tasks/[id]/files/[fileId]", () => {
   });
 
   it("downloads HTML/SVG as an attachment with a generic content type", async () => {
-    const session = sessionFor("u1", "500b");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    const attachment = createAttachment({
+    const session = await sessionFor("u1", "500b");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    const attachment = await createAttachment({
       taskId: task.id,
       uploadedBy: "u1",
       filename: "xss.svg",
@@ -101,14 +101,14 @@ describe("GET /api/tasks/[id]/files/[fileId]", () => {
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("application/octet-stream");
     expect(response.headers.get("content-disposition")).toContain("attachment;");
-    expect(findAttachmentById(attachment.id)?.mimeType).toBe("image/svg+xml");
+    expect((await findAttachmentById(attachment.id))?.mimeType).toBe("image/svg+xml");
   });
 
   it("percent-encodes a Unicode filename in Content-Disposition and decodes back to the original", async () => {
-    const session = sessionFor("u1", "501");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    const attachment = createAttachment({
+    const session = await sessionFor("u1", "501");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    const attachment = await createAttachment({
       taskId: task.id,
       uploadedBy: "u1",
       filename: "Отчёт по задаче.pdf",
@@ -125,11 +125,11 @@ describe("GET /api/tasks/[id]/files/[fileId]", () => {
   });
 
   it("allows a shared read-only user to download", async () => {
-    const session = sessionFor("u2", "502");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "read" });
-    const task = makeTaskIn(list.id);
-    const attachment = createAttachment({
+    const session = await sessionFor("u2", "502");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "read" });
+    const task = await makeTaskIn(list.id);
+    const attachment = await createAttachment({
       taskId: task.id,
       uploadedBy: "u1",
       filename: "a.txt",
@@ -143,10 +143,10 @@ describe("GET /api/tasks/[id]/files/[fileId]", () => {
   });
 
   it("returns 404 for a task inaccessible to the user (not a leaking 403)", async () => {
-    const session = sessionFor("u2", "503");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    const attachment = createAttachment({
+    const session = await sessionFor("u2", "503");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    const attachment = await createAttachment({
       taskId: task.id,
       uploadedBy: "u1",
       filename: "a.txt",
@@ -160,9 +160,9 @@ describe("GET /api/tasks/[id]/files/[fileId]", () => {
   });
 
   it("returns 404 for an unknown file id", async () => {
-    const session = sessionFor("u1", "504");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "504");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callGet(task.id, "does-not-exist", fileRequest(task.id, "does-not-exist", session.id));
 
@@ -170,9 +170,9 @@ describe("GET /api/tasks/[id]/files/[fileId]", () => {
   });
 
   it("returns 404 for a path-traversal-shaped file id instead of reading any file (no traversal)", async () => {
-    const session = sessionFor("u1", "505");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "505");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
     const traversalId = "../../../../etc/passwd";
 
     const response = await callGet(task.id, traversalId, fileRequest(task.id, traversalId, session.id));
@@ -181,11 +181,11 @@ describe("GET /api/tasks/[id]/files/[fileId]", () => {
   });
 
   it("returns 404 when the file id belongs to a different task than the one in the URL (no IDOR via mismatched ids)", async () => {
-    const session = sessionFor("u1", "506");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const taskA = makeTaskIn(list.id);
-    const taskB = makeTaskIn(list.id);
-    const attachment = createAttachment({
+    const session = await sessionFor("u1", "506");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const taskA = await makeTaskIn(list.id);
+    const taskB = await makeTaskIn(list.id);
+    const attachment = await createAttachment({
       taskId: taskA.id,
       uploadedBy: "u1",
       filename: "a.txt",
@@ -199,10 +199,10 @@ describe("GET /api/tasks/[id]/files/[fileId]", () => {
   });
 
   it("returns 404 for a file that belongs to another user's inaccessible task, even with a valid file id", async () => {
-    const session = sessionFor("u2", "507");
-    const list = createList("u1", { title: "Private", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    const attachment = createAttachment({
+    const session = await sessionFor("u2", "507");
+    const list = await createList("u1", { title: "Private", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    const attachment = await createAttachment({
       taskId: task.id,
       uploadedBy: "u1",
       filename: "secret.txt",
@@ -216,17 +216,17 @@ describe("GET /api/tasks/[id]/files/[fileId]", () => {
   });
 
   it("returns 404 for a soft-deleted task", async () => {
-    const session = sessionFor("u1", "508");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    const attachment = createAttachment({
+    const session = await sessionFor("u1", "508");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    const attachment = await createAttachment({
       taskId: task.id,
       uploadedBy: "u1",
       filename: "a.txt",
       mimeType: "text/plain",
       bytes: new Uint8Array([1]),
     });
-    insertTasks([{ ...task, deletedAt: "2026-08-01T00:00:00.000Z" }]);
+    await insertTasks([{ ...task, deletedAt: "2026-08-01T00:00:00.000Z" }]);
 
     const response = await callGet(task.id, attachment.id, fileRequest(task.id, attachment.id, session.id));
 
@@ -236,9 +236,9 @@ describe("GET /api/tasks/[id]/files/[fileId]", () => {
 
 describe("DELETE /api/tasks/[id]/files/[fileId]", () => {
   it("returns 401 when no session cookie is present", async () => {
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    const attachment = createAttachment({
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    const attachment = await createAttachment({
       taskId: task.id,
       uploadedBy: "u1",
       filename: "a.txt",
@@ -256,10 +256,10 @@ describe("DELETE /api/tasks/[id]/files/[fileId]", () => {
   });
 
   it("deletes the file for the owner and returns 204", async () => {
-    const session = sessionFor("u1", "510");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    const attachment = createAttachment({
+    const session = await sessionFor("u1", "510");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    const attachment = await createAttachment({
       taskId: task.id,
       uploadedBy: "u1",
       filename: "a.txt",
@@ -274,15 +274,15 @@ describe("DELETE /api/tasks/[id]/files/[fileId]", () => {
     );
 
     expect(response.status).toBe(204);
-    expect(findAttachmentById(attachment.id)).toBeUndefined();
+    expect(await findAttachmentById(attachment.id)).toBeUndefined();
   });
 
   it("allows a shared editor to delete", async () => {
-    const session = sessionFor("u2", "511");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "edit" });
-    const task = makeTaskIn(list.id);
-    const attachment = createAttachment({
+    const session = await sessionFor("u2", "511");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "edit" });
+    const task = await makeTaskIn(list.id);
+    const attachment = await createAttachment({
       taskId: task.id,
       uploadedBy: "u1",
       filename: "a.txt",
@@ -300,11 +300,11 @@ describe("DELETE /api/tasks/[id]/files/[fileId]", () => {
   });
 
   it("returns 403 for a read-only shared user, without deleting", async () => {
-    const session = sessionFor("u2", "512");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "read" });
-    const task = makeTaskIn(list.id);
-    const attachment = createAttachment({
+    const session = await sessionFor("u2", "512");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "read" });
+    const task = await makeTaskIn(list.id);
+    const attachment = await createAttachment({
       taskId: task.id,
       uploadedBy: "u1",
       filename: "a.txt",
@@ -319,14 +319,14 @@ describe("DELETE /api/tasks/[id]/files/[fileId]", () => {
     );
 
     expect(response.status).toBe(403);
-    expect(findAttachmentById(attachment.id)).toBeDefined();
+    expect(await findAttachmentById(attachment.id)).toBeDefined();
   });
 
   it("returns 404 for a task inaccessible to the user (not a leaking 403)", async () => {
-    const session = sessionFor("u2", "513");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    const attachment = createAttachment({
+    const session = await sessionFor("u2", "513");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    const attachment = await createAttachment({
       taskId: task.id,
       uploadedBy: "u1",
       filename: "a.txt",
@@ -344,9 +344,9 @@ describe("DELETE /api/tasks/[id]/files/[fileId]", () => {
   });
 
   it("returns 404 for an unknown file id", async () => {
-    const session = sessionFor("u1", "514");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "514");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callDelete(
       task.id,
@@ -358,11 +358,11 @@ describe("DELETE /api/tasks/[id]/files/[fileId]", () => {
   });
 
   it("returns 404 when the file id belongs to a different task than the one in the URL (no IDOR via mismatched ids)", async () => {
-    const session = sessionFor("u1", "515");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const taskA = makeTaskIn(list.id);
-    const taskB = makeTaskIn(list.id);
-    const attachment = createAttachment({
+    const session = await sessionFor("u1", "515");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const taskA = await makeTaskIn(list.id);
+    const taskB = await makeTaskIn(list.id);
+    const attachment = await createAttachment({
       taskId: taskA.id,
       uploadedBy: "u1",
       filename: "a.txt",
@@ -377,21 +377,21 @@ describe("DELETE /api/tasks/[id]/files/[fileId]", () => {
     );
 
     expect(response.status).toBe(404);
-    expect(findAttachmentById(attachment.id)).toBeDefined();
+    expect(await findAttachmentById(attachment.id)).toBeDefined();
   });
 
   it("returns 404 for a soft-deleted task", async () => {
-    const session = sessionFor("u1", "516");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    const attachment = createAttachment({
+    const session = await sessionFor("u1", "516");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    const attachment = await createAttachment({
       taskId: task.id,
       uploadedBy: "u1",
       filename: "a.txt",
       mimeType: "text/plain",
       bytes: new Uint8Array([1]),
     });
-    insertTasks([{ ...task, deletedAt: "2026-08-01T00:00:00.000Z" }]);
+    await insertTasks([{ ...task, deletedAt: "2026-08-01T00:00:00.000Z" }]);
 
     const response = await callDelete(
       task.id,
@@ -403,10 +403,10 @@ describe("DELETE /api/tasks/[id]/files/[fileId]", () => {
   });
 
   it("returns 404 (not a crash) when deleting the same file twice", async () => {
-    const session = sessionFor("u1", "517");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    const attachment = createAttachment({
+    const session = await sessionFor("u1", "517");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    const attachment = await createAttachment({
       taskId: task.id,
       uploadedBy: "u1",
       filename: "a.txt",

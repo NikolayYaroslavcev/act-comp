@@ -26,8 +26,8 @@ function cookieJar(sessionId?: string) {
   };
 }
 
-function sessionFor(userId: string) {
-  return createSession({ userId, ip: "192.0.2.5 (demo)", device: "Chrome on Windows", rememberMe: false });
+async function sessionFor(userId: string) {
+  return await createSession({ userId, ip: "192.0.2.5 (demo)", device: "Chrome on Windows", rememberMe: false });
 }
 
 // getCurrentSession resolves the session's userId against the seeded users
@@ -38,8 +38,8 @@ const OWNER = "u1";
 const OTHER = "u2";
 const THIRD = "u3";
 
-function makeTaskIn(listId: string, overrides: Partial<CreateTaskInput> = {}) {
-  return createTask({
+async function makeTaskIn(listId: string, overrides: Partial<CreateTaskInput> = {}) {
+  return await createTask({
     listId,
     title: "Task",
     description: "",
@@ -60,7 +60,7 @@ async function renderPage(listId: string) {
 describe("ListDetailPage — anonymous visitor", () => {
   it("redirects to /login when there is no session cookie", async () => {
     cookiesMock.mockResolvedValue(cookieJar());
-    const list = createList(OWNER, { title: "Owned", template: "work", deadline: null });
+    const list = await createList(OWNER, { title: "Owned", template: "work", deadline: null });
 
     await ListDetailPage({ params: Promise.resolve({ id: list.id }) });
 
@@ -69,7 +69,7 @@ describe("ListDetailPage — anonymous visitor", () => {
 
   it("redirects to /login for an unknown session id", async () => {
     cookiesMock.mockResolvedValue(cookieJar("does-not-exist"));
-    const list = createList(OWNER, { title: "Owned", template: "work", deadline: null });
+    const list = await createList(OWNER, { title: "Owned", template: "work", deadline: null });
 
     await ListDetailPage({ params: Promise.resolve({ id: list.id }) });
 
@@ -79,8 +79,8 @@ describe("ListDetailPage — anonymous visitor", () => {
 
 describe("ListDetailPage — access control", () => {
   it("shows a not-found message for a list the user cannot access", async () => {
-    const list = createList(OWNER, { title: "Private list", template: "work", deadline: null });
-    const session = sessionFor(OTHER);
+    const list = await createList(OWNER, { title: "Private list", template: "work", deadline: null });
+    const session = await sessionFor(OTHER);
     cookiesMock.mockResolvedValue(cookieJar(session.id));
 
     await renderPage(list.id);
@@ -90,7 +90,7 @@ describe("ListDetailPage — access control", () => {
   });
 
   it("shows a not-found message for an unknown list id", async () => {
-    const session = sessionFor(OWNER);
+    const session = await sessionFor(OWNER);
     cookiesMock.mockResolvedValue(cookieJar(session.id));
 
     await renderPage("does-not-exist");
@@ -99,9 +99,9 @@ describe("ListDetailPage — access control", () => {
   });
 
   it("shows a not-found message for a soft-deleted list, even for its owner", async () => {
-    const list = createList(OWNER, { title: "Deleted list", template: "work", deadline: null });
-    findListById(list.id)!.deletedAt = "2026-08-01T00:00:00.000Z";
-    const session = sessionFor(OWNER);
+    const list = await createList(OWNER, { title: "Deleted list", template: "work", deadline: null });
+    (await findListById(list.id))!.deletedAt = "2026-08-01T00:00:00.000Z";
+    const session = await sessionFor(OWNER);
     cookiesMock.mockResolvedValue(cookieJar(session.id));
 
     await renderPage(list.id);
@@ -112,9 +112,9 @@ describe("ListDetailPage — access control", () => {
 
 describe("ListDetailPage — accessible lists", () => {
   it("renders the list detail for its owner", async () => {
-    const list = createList(OWNER, { title: "Sprint tasks", template: "work", deadline: null });
-    makeTaskIn(list.id, { title: "First task" });
-    const session = sessionFor(OWNER);
+    const list = await createList(OWNER, { title: "Sprint tasks", template: "work", deadline: null });
+    await makeTaskIn(list.id, { title: "First task" });
+    const session = await sessionFor(OWNER);
     cookiesMock.mockResolvedValue(cookieJar(session.id));
 
     await renderPage(list.id);
@@ -126,9 +126,9 @@ describe("ListDetailPage — accessible lists", () => {
   });
 
   it("shows the list's real edit history in the History dialog", async () => {
-    const list = createList(OWNER, { title: "Sprint tasks", template: "work", deadline: null });
-    updateList(list.id, OWNER, { title: "Renamed sprint" });
-    const session = sessionFor(OWNER);
+    const list = await createList(OWNER, { title: "Sprint tasks", template: "work", deadline: null });
+    await updateList(list.id, OWNER, { title: "Renamed sprint" });
+    const session = await sessionFor(OWNER);
     cookiesMock.mockResolvedValue(cookieJar(session.id));
 
     const user = userEvent.setup();
@@ -139,10 +139,10 @@ describe("ListDetailPage — accessible lists", () => {
   });
 
   it("renders the list detail for a shared read-only viewer", async () => {
-    const list = createList(OWNER, { title: "Shared list", template: "personal", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: OTHER, access: "read" });
-    makeTaskIn(list.id, { title: "Shared task" });
-    const session = sessionFor(OTHER);
+    const list = await createList(OWNER, { title: "Shared list", template: "personal", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: OTHER, access: "read" });
+    await makeTaskIn(list.id, { title: "Shared task" });
+    const session = await sessionFor(OTHER);
     cookiesMock.mockResolvedValue(cookieJar(session.id));
 
     await renderPage(list.id);
@@ -154,9 +154,9 @@ describe("ListDetailPage — accessible lists", () => {
   });
 
   it("renders the list detail for a shared editor", async () => {
-    const list = createList(OWNER, { title: "Editable list", template: "project", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: THIRD, access: "edit" });
-    const session = sessionFor(THIRD);
+    const list = await createList(OWNER, { title: "Editable list", template: "project", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: THIRD, access: "edit" });
+    const session = await sessionFor(THIRD);
     cookiesMock.mockResolvedValue(cookieJar(session.id));
 
     await renderPage(list.id);
@@ -166,11 +166,11 @@ describe("ListDetailPage — accessible lists", () => {
   });
 
   it("does not render soft-deleted tasks", async () => {
-    const list = createList(OWNER, { title: "List with deleted task", template: "work", deadline: null });
-    makeTaskIn(list.id, { title: "Visible task" });
-    const deletedTask = makeTaskIn(list.id, { title: "Deleted task" });
-    insertTasks([{ ...deletedTask, deletedAt: "2026-08-01T00:00:00.000Z" }]);
-    const session = sessionFor(OWNER);
+    const list = await createList(OWNER, { title: "List with deleted task", template: "work", deadline: null });
+    await makeTaskIn(list.id, { title: "Visible task" });
+    const deletedTask = await makeTaskIn(list.id, { title: "Deleted task" });
+    await insertTasks([{ ...deletedTask, deletedAt: "2026-08-01T00:00:00.000Z" }]);
+    const session = await sessionFor(OWNER);
     cookiesMock.mockResolvedValue(cookieJar(session.id));
 
     await renderPage(list.id);
@@ -181,8 +181,8 @@ describe("ListDetailPage — accessible lists", () => {
   });
 
   it("shows the empty state for a list with no active tasks", async () => {
-    const list = createList(OWNER, { title: "Empty list", template: "work", deadline: null });
-    const session = sessionFor(OWNER);
+    const list = await createList(OWNER, { title: "Empty list", template: "work", deadline: null });
+    const session = await sessionFor(OWNER);
     cookiesMock.mockResolvedValue(cookieJar(session.id));
 
     await renderPage(list.id);

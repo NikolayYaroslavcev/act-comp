@@ -5,7 +5,7 @@ import { SESSION_COOKIE_NAME } from "@/features/auth/session-cookie";
 
 export async function POST(request: NextRequest) {
   const sessionId = request.cookies.get(SESSION_COOKIE_NAME)?.value;
-  logout(sessionId);
+  await logout(sessionId);
 
   const response = jsonOk({ success: true }, 200);
   response.cookies.set(SESSION_COOKIE_NAME, "", {

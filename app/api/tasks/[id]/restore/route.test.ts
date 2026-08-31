@@ -16,8 +16,8 @@ function restoreRequest(id: string, sessionId: string | undefined) {
   });
 }
 
-function callRestore(id: string, request: NextRequest) {
-  return POST(request, { params: Promise.resolve({ id }) });
+async function callRestore(id: string, request: NextRequest) {
+  return await POST(request, { params: Promise.resolve({ id }) });
 }
 
 function getRequest(id: string, sessionId: string | undefined) {
@@ -26,15 +26,15 @@ function getRequest(id: string, sessionId: string | undefined) {
   });
 }
 
-function callGet(id: string, request: NextRequest) {
-  return GET(request, { params: Promise.resolve({ id }) });
+async function callGet(id: string, request: NextRequest) {
+  return await GET(request, { params: Promise.resolve({ id }) });
 }
 
 // The seed data only defines users u1/u2/u3 (see data.json) — requireAuth
 // resolves a session to a real user, so tests must reuse those ids rather
 // than inventing arbitrary owner ids.
-function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
-  return createSession({
+async function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
+  return await createSession({
     userId,
     ip: `192.0.2.${suffix} (demo)`,
     device: "Chrome on Windows",
@@ -42,8 +42,8 @@ function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
   });
 }
 
-function makeTaskIn(listId: string) {
-  return createTask({
+async function makeTaskIn(listId: string) {
+  return await createTask({
     listId,
     title: "Task",
     description: "",
@@ -58,8 +58,8 @@ function makeTaskIn(listId: string) {
 
 describe("POST /api/tasks/[id]/restore", () => {
   it("returns 401 when no session cookie is present", async () => {
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callRestore(task.id, restoreRequest(task.id, undefined));
 
@@ -67,7 +67,7 @@ describe("POST /api/tasks/[id]/restore", () => {
   });
 
   it("returns 404 for an unknown task id", async () => {
-    const session = sessionFor("u1", "220");
+    const session = await sessionFor("u1", "220");
 
     const response = await callRestore("does-not-exist", restoreRequest("does-not-exist", session.id));
 
@@ -75,10 +75,10 @@ describe("POST /api/tasks/[id]/restore", () => {
   });
 
   it("returns 404 (not a leaking 403) for a stranger with no access at all", async () => {
-    const stranger = sessionFor("u2", "221");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    insertTasks([{ ...task, deletedAt: new Date().toISOString() }]);
+    const stranger = await sessionFor("u2", "221");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    await insertTasks([{ ...task, deletedAt: new Date().toISOString() }]);
 
     const response = await callRestore(task.id, restoreRequest(task.id, stranger.id));
 
@@ -86,11 +86,11 @@ describe("POST /api/tasks/[id]/restore", () => {
   });
 
   it("returns 403 for an edit-access shared user", async () => {
-    const editor = sessionFor("u2", "222");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "edit" });
-    const task = makeTaskIn(list.id);
-    insertTasks([{ ...task, deletedAt: new Date().toISOString() }]);
+    const editor = await sessionFor("u2", "222");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "edit" });
+    const task = await makeTaskIn(list.id);
+    await insertTasks([{ ...task, deletedAt: new Date().toISOString() }]);
 
     const response = await callRestore(task.id, restoreRequest(task.id, editor.id));
 
@@ -98,10 +98,10 @@ describe("POST /api/tasks/[id]/restore", () => {
   });
 
   it("returns 200 and clears deletedAt for the owner within the restore window", async () => {
-    const session = sessionFor("u1", "223");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    insertTasks([{ ...task, deletedAt: new Date().toISOString() }]);
+    const session = await sessionFor("u1", "223");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    await insertTasks([{ ...task, deletedAt: new Date().toISOString() }]);
 
     const response = await callRestore(task.id, restoreRequest(task.id, session.id));
 
@@ -111,22 +111,22 @@ describe("POST /api/tasks/[id]/restore", () => {
   });
 
   it("returns 409 when the restore window has expired", async () => {
-    const session = sessionFor("u1", "224");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "224");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
     const expired = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000).toISOString();
-    insertTasks([{ ...task, deletedAt: expired }]);
+    await insertTasks([{ ...task, deletedAt: expired }]);
 
     const response = await callRestore(task.id, restoreRequest(task.id, session.id));
 
     expect(response.status).toBe(409);
-    expect(findTaskById(task.id)!.deletedAt).toBe(expired);
+    expect((await findTaskById(task.id))!.deletedAt).toBe(expired);
   });
 
   it("is idempotent (200) when restoring a task that is not deleted", async () => {
-    const session = sessionFor("u1", "225");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "225");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callRestore(task.id, restoreRequest(task.id, session.id));
 
@@ -136,11 +136,11 @@ describe("POST /api/tasks/[id]/restore", () => {
   });
 
   it("records a history entry describing the restoration", async () => {
-    const session = sessionFor("u1", "226");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "226");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
     const deletedAt = new Date().toISOString();
-    insertTasks([{ ...task, deletedAt }]);
+    await insertTasks([{ ...task, deletedAt }]);
 
     const response = await callRestore(task.id, restoreRequest(task.id, session.id));
 
@@ -150,10 +150,10 @@ describe("POST /api/tasks/[id]/restore", () => {
   });
 
   it("makes the task visible again via GET after restore", async () => {
-    const session = sessionFor("u1", "227");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    insertTasks([{ ...task, deletedAt: new Date().toISOString() }]);
+    const session = await sessionFor("u1", "227");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    await insertTasks([{ ...task, deletedAt: new Date().toISOString() }]);
 
     const beforeGet = await callGet(task.id, getRequest(task.id, session.id));
     expect(beforeGet.status).toBe(404);
@@ -165,15 +165,15 @@ describe("POST /api/tasks/[id]/restore", () => {
   });
 
   it("does not make the task visible when the parent list is deleted", async () => {
-    const session = sessionFor("u1", "228");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    insertTasks([{ ...task, deletedAt: new Date().toISOString() }]);
-    findListById(list.id)!.deletedAt = new Date().toISOString();
+    const session = await sessionFor("u1", "228");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    await insertTasks([{ ...task, deletedAt: new Date().toISOString() }]);
+    (await findListById(list.id))!.deletedAt = new Date().toISOString();
 
     const response = await callRestore(task.id, restoreRequest(task.id, session.id));
 
     expect(response.status).toBe(404);
-    expect(findTaskById(task.id)!.deletedAt).not.toBeNull();
+    expect((await findTaskById(task.id))!.deletedAt).not.toBeNull();
   });
 });

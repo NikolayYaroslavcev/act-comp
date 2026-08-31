@@ -9,13 +9,13 @@ import { deleteList } from "@/features/list/delete-list";
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function GET(request: NextRequest, { params }: RouteContext) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if (!auth.authorized) {
     return jsonError(401, "Unauthorized");
   }
 
   const { id } = await params;
-  const result = getVisibleList(auth.user.id, id);
+  const result = await getVisibleList(auth.user.id, id);
   if (result.status === "not_found") {
     return jsonError(404, "List not found");
   }
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 }
 
 export async function PATCH(request: NextRequest, { params }: RouteContext) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if (!auth.authorized) {
     return jsonError(401, "Unauthorized");
   }
@@ -40,7 +40,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     return jsonError(400, "Validation failed", parsed.error.issues);
   }
 
-  const result = updateList(auth.user.id, id, parsed.data);
+  const result = await updateList(auth.user.id, id, parsed.data);
   switch (result.status) {
     case "not_found":
     case "deleted":
@@ -53,13 +53,13 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
 }
 
 export async function DELETE(request: NextRequest, { params }: RouteContext) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if (!auth.authorized) {
     return jsonError(401, "Unauthorized");
   }
 
   const { id } = await params;
-  const result = deleteList(auth.user.id, id);
+  const result = await deleteList(auth.user.id, id);
   switch (result.status) {
     case "not_found":
       return jsonError(404, "List not found");

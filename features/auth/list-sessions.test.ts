@@ -8,14 +8,14 @@ const userAgent =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 describe("listSessions", () => {
-  it("records a login as history for that user", () => {
-    const result = login(
+  it("records a login as history for that user", async () => {
+    const result = await login(
       { email: "admin@example.com", password: "Admin123!", rememberMe: false },
       { userAgent },
     );
     expect(result).not.toBeNull();
 
-    const history = listSessions(result!.user.id, result!.session.id);
+    const history = await listSessions(result!.user.id, result!.session.id);
     const entry = history.find((item) => item.id === deriveSessionDisplayId(result!.session.id));
 
     expect(entry).toMatchObject({
@@ -28,53 +28,53 @@ describe("listSessions", () => {
     });
   });
 
-  it("exposes a display id, never the real session id", () => {
-    const result = login(
+  it("exposes a display id, never the real session id", async () => {
+    const result = await login(
       { email: "admin@example.com", password: "Admin123!", rememberMe: false },
       { userAgent },
     );
     expect(result).not.toBeNull();
 
-    const history = listSessions(result!.user.id, result!.session.id);
+    const history = await listSessions(result!.user.id, result!.session.id);
 
     expect(history.map((item) => item.id)).not.toContain(result!.session.id);
   });
 
-  it("returns only sessions belonging to the given user", () => {
-    const own = createSession({
+  it("returns only sessions belonging to the given user", async () => {
+    const own = await createSession({
       userId: "u-list-own",
       ip: "192.0.2.50 (demo)",
       device: "Chrome on Windows",
       rememberMe: false,
     });
-    const other = createSession({
+    const other = await createSession({
       userId: "u-list-other",
       ip: "192.0.2.51 (demo)",
       device: "Firefox on Linux",
       rememberMe: false,
     });
 
-    const history = listSessions("u-list-own", own.id);
+    const history = await listSessions("u-list-own", own.id);
 
     expect(history.map((item) => item.id)).toContain(deriveSessionDisplayId(own.id));
     expect(history.map((item) => item.id)).not.toContain(deriveSessionDisplayId(other.id));
   });
 
-  it("includes multiple sessions of the same user", () => {
-    const first = createSession({
+  it("includes multiple sessions of the same user", async () => {
+    const first = await createSession({
       userId: "u-list-multi",
       ip: "192.0.2.52 (demo)",
       device: "Chrome on Windows",
       rememberMe: false,
     });
-    const second = createSession({
+    const second = await createSession({
       userId: "u-list-multi",
       ip: "192.0.2.53 (demo)",
       device: "Firefox on Linux",
       rememberMe: true,
     });
 
-    const history = listSessions("u-list-multi", second.id);
+    const history = await listSessions("u-list-multi", second.id);
 
     expect(history.map((item) => item.id)).toEqual(
       expect.arrayContaining([deriveSessionDisplayId(first.id), deriveSessionDisplayId(second.id)]),
@@ -83,7 +83,7 @@ describe("listSessions", () => {
     expect(history.find((item) => item.id === deriveSessionDisplayId(first.id))?.isCurrent).toBe(false);
   });
 
-  it("returns an empty list when the user has no sessions", () => {
-    expect(listSessions("u-list-none", "unused")).toEqual([]);
+  it("returns an empty list when the user has no sessions", async () => {
+    expect(await listSessions("u-list-none", "unused")).toEqual([]);
   });
 });

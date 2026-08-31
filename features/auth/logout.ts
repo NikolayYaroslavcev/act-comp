@@ -1,9 +1,9 @@
 import { revokeSession } from "@/entities/session/repository";
 
-export function logout(sessionId: string | null | undefined): void {
+export async function logout(sessionId: string | null | undefined): Promise<void> {
   if (!sessionId) {
     return;
   }
 
-  revokeSession(sessionId);
+  await revokeSession(sessionId);
 }

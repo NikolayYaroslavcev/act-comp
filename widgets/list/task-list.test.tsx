@@ -28,7 +28,7 @@ function urlOf(arg: unknown): string {
 }
 
 function stubFetchForTaskAction(handler: (url: string, init?: RequestInit) => Promise<Response> | Response) {
-  const fetchMock = vi.fn((input: string | Request, init?: RequestInit) => {
+  const fetchMock = vi.fn(async (input: string | Request, init?: RequestInit) => {
     const url = urlOf(input);
     if (url.endsWith("/comments") || url.endsWith("/activity")) {
       return Promise.resolve(jsonResponse(200, { data: [] }));
@@ -36,7 +36,7 @@ function stubFetchForTaskAction(handler: (url: string, init?: RequestInit) => Pr
     if (url.startsWith("/api/saved-filters")) {
       return Promise.resolve(jsonResponse(200, { data: { recent: [], saved: [] } }));
     }
-    return handler(url, init);
+    return await handler(url, init);
   });
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
@@ -454,7 +454,7 @@ describe("TaskList search and filters", () => {
     };
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (input: string | Request, init?: RequestInit) => {
+      vi.fn((input: string | Request, init?: RequestInit) => {
         const url = urlOf(input);
         if (url.startsWith("/api/saved-filters") && init?.method === "POST") {
           return jsonResponse(200, { data: savedFilter });
@@ -494,7 +494,7 @@ describe("TaskList search and filters", () => {
     };
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (input: string | Request, init?: RequestInit) => {
+      vi.fn((input: string | Request, init?: RequestInit) => {
         const url = urlOf(input);
         if (url.startsWith("/api/saved-filters") && init?.method === "POST") {
           return jsonResponse(200, { data: savedFilter });

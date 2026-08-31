@@ -52,17 +52,18 @@ function nextTaskCode(db: Database, listId: string): string {
   return `TEST-${candidate}`;
 }
 
-export function listTasks(listId?: string, db: Database = getDb()): Task[] {
-  const tasks = Object.values(db.tasks);
+export async function listTasks(listId?: string, db?: Database): Promise<Task[]> {
+  const resolved = db ?? (await getDb());
+  const tasks = Object.values(resolved.tasks);
   return listId ? tasks.filter((task) => task.listId === listId) : tasks;
 }
 
-export function findTaskById(id: string): Task | undefined {
-  return getDb().tasks[id];
+export async function findTaskById(id: string): Promise<Task | undefined> {
+  return (await getDb()).tasks[id];
 }
 
-export function countTasks(): number {
-  return Object.keys(getDb().tasks).length;
+export async function countTasks(): Promise<number> {
+  return Object.keys((await getDb()).tasks).length;
 }
 
 function activityActionForTaskField(field: string): ActivityAction {
@@ -95,8 +96,8 @@ function recordTaskFieldActivity(
   });
 }
 
-export function createTask(input: CreateTaskInput, byUserId?: string): Task {
-  const db = getDb();
+export async function createTask(input: CreateTaskInput, byUserId?: string): Promise<Task> {
+  const db = await getDb();
   const taskDefaults = (byUserId ? db.users[byUserId]?.settings.taskDefaults : undefined) ?? DEFAULT_SETTINGS.taskDefaults;
   const task: Task = {
     id: crypto.randomUUID(),
@@ -136,7 +137,7 @@ export function createTask(input: CreateTaskInput, byUserId?: string): Task {
       byUserId,
     });
   }
-  saveDb(db);
+  await saveDb(db);
   return task;
 }
 
@@ -161,14 +162,14 @@ export type UpdateTaskOutcome =
   | { status: "blocked" }
   | { status: "ok"; task: Task; cascade: CascadeUpdate[] };
 
-export function updateTask(
+export async function updateTask(
   id: string,
   userId: string,
   patch: UpdateTaskInput,
   now: Date = new Date(),
   options: { recordFieldActivity?: boolean } = {},
-): UpdateTaskOutcome {
-  const db = getDb();
+): Promise<UpdateTaskOutcome> {
+  const db = await getDb();
   const existing = db.tasks[id];
   if (!existing || existing.deletedAt !== null) {
     return { status: "not_found" };
@@ -197,7 +198,7 @@ export function updateTask(
   const candidate: Task = { ...existing, ...patch };
 
   if (changes.some((change) => change.field === "dependsOn")) {
-    const siblings = listTasks(existing.listId, db).map((task) => (task.id === id ? candidate : task));
+    const siblings = (await listTasks(existing.listId, db)).map((task) => (task.id === id ? candidate : task));
     if (detectCycle(siblings)) {
       return { status: "cycle" };
     }
@@ -224,11 +225,11 @@ export function updateTask(
 
   let cascade: CascadeUpdate[] = [];
   if (changes.some((change) => change.field === "status")) {
-    const listTasksWithUpdated = listTasks(existing.listId, db).map((task) => (task.id === id ? updated : task));
+    const listTasksWithUpdated = (await listTasks(existing.listId, db)).map((task) => (task.id === id ? updated : task));
     cascade = getCascadeUpdates(updated, listTasksWithUpdated, createSimilarTaskHistoryProvider(listTasksWithUpdated), now);
   }
 
-  saveDb(db);
+  await saveDb(db);
   return { status: "ok", task: updated, cascade };
 }
 
@@ -246,13 +247,13 @@ export interface TaskExtensionInput {
 // shape for the estimatedMin change instead of inventing a new one, the
 // same way applyTaskTimer is a dedicated mutation alongside updateTask
 // rather than routed through it.
-export function applyTaskExtension(
+export async function applyTaskExtension(
   id: string,
   userId: string,
   extension: TaskExtensionInput,
   now: Date = new Date(),
-): ApplyTaskExtensionOutcome {
-  const db = getDb();
+): Promise<ApplyTaskExtensionOutcome> {
+  const db = await getDb();
   const existing = db.tasks[id];
   if (!existing || existing.deletedAt !== null) {
     return { status: "not_found" };
@@ -275,7 +276,7 @@ export function applyTaskExtension(
   };
   db.tasks[id] = updated;
   recordTaskFieldActivity(db, id, userId, nowIso, "estimatedMin", existing.estimatedMin, newEstimatedMin);
-  saveDb(db);
+  await saveDb(db);
   return { status: "ok", task: updated };
 }
 
@@ -288,13 +289,13 @@ export type RollbackTaskOutcome =
   | { status: "blocked" }
   | { status: "ok"; task: Task; cascade: CascadeUpdate[] };
 
-export function rollbackTask(
+export async function rollbackTask(
   id: string,
   userId: string,
   historyIndex: number,
   now: Date = new Date(),
-): RollbackTaskOutcome {
-  const existing = findTaskById(id);
+): Promise<RollbackTaskOutcome> {
+  const existing = await findTaskById(id);
   if (!existing || existing.deletedAt !== null) {
     return { status: "not_found" };
   }
@@ -304,11 +305,11 @@ export function rollbackTask(
     return { status: "unknown_version" };
   }
 
-  const result = updateTask(id, userId, buildRollbackPatch(existing, reconstructed.snapshot), now, {
+  const result = await updateTask(id, userId, buildRollbackPatch(existing, reconstructed.snapshot), now, {
     recordFieldActivity: false,
   });
   if (result.status === "ok" && result.task.history.length > existing.history.length) {
-    const db = getDb();
+    const db = await getDb();
     appendActivity(db, {
       entityType: "task",
       entityId: id,
@@ -317,16 +318,17 @@ export function rollbackTask(
       byUserId: userId,
       metadata: { historyIndex },
     });
-    saveDb(db);
+    await saveDb(db);
   }
   return result;
 }
 
-export function insertTasks(tasks: Task[], db: Database = getDb()): void {
+export async function insertTasks(tasks: Task[], db?: Database): Promise<void> {
+  const resolved = db ?? (await getDb());
   for (const task of tasks) {
-    db.tasks[task.id] = task;
+    resolved.tasks[task.id] = task;
   }
-  saveDb(db);
+  await saveDb(resolved);
 }
 
 export type CloneTaskOutcome = { status: "not_found" } | { status: "deleted" } | { status: "ok"; task: Task };
@@ -339,8 +341,8 @@ export type CloneTaskOutcome = { status: "not_found" } | { status: "deleted" } |
 // afterwards, since buildDuplicatedTasks copies it verbatim (fine for a
 // duplicated list, which has its own code namespace; not fine here, where
 // the clone lands in the same list as the source).
-export function cloneTask(id: string, now: Date = new Date(), byUserId?: string): CloneTaskOutcome {
-  const db = getDb();
+export async function cloneTask(id: string, now: Date = new Date(), byUserId?: string): Promise<CloneTaskOutcome> {
+  const db = await getDb();
   const existing = db.tasks[id];
   if (!existing) {
     return { status: "not_found" };
@@ -369,14 +371,14 @@ export function cloneTask(id: string, now: Date = new Date(), byUserId?: string)
       metadata: { sourceTaskId: existing.id },
     });
   }
-  saveDb(db);
+  await saveDb(db);
   return { status: "ok", task: clone };
 }
 
 export type DeleteTaskOutcome = { status: "not_found" } | { status: "ok"; task: Task };
 
-export function deleteTask(id: string, userId: string, now: Date = new Date()): DeleteTaskOutcome {
-  const db = getDb();
+export async function deleteTask(id: string, userId: string, now: Date = new Date()): Promise<DeleteTaskOutcome> {
+  const db = await getDb();
   const existing = db.tasks[id];
   if (!existing) {
     return { status: "not_found" };
@@ -405,14 +407,14 @@ export function deleteTask(id: string, userId: string, now: Date = new Date()): 
     applyParentSyncUpdates(db, computeParentSyncUpdates(id, existing.parentId, null, tasksByIdMap(db)));
   }
 
-  saveDb(db);
+  await saveDb(db);
   return { status: "ok", task: updated };
 }
 
 export type RestoreTaskOutcome = { status: "not_found" } | { status: "expired" } | { status: "ok"; task: Task };
 
-export function restoreTask(id: string, userId: string, now: Date = new Date()): RestoreTaskOutcome {
-  const db = getDb();
+export async function restoreTask(id: string, userId: string, now: Date = new Date()): Promise<RestoreTaskOutcome> {
+  const db = await getDb();
   const existing = db.tasks[id];
   if (!existing) {
     return { status: "not_found" };
@@ -448,7 +450,7 @@ export function restoreTask(id: string, userId: string, now: Date = new Date()):
     }
   }
 
-  saveDb(db);
+  await saveDb(db);
   return { status: "ok", task: updated };
 }
 
@@ -459,13 +461,13 @@ export type ApplyTaskTimerOutcome =
   | { status: "invalid_transition" }
   | { status: "ok"; task: Task };
 
-export function applyTaskTimer(
+export async function applyTaskTimer(
   id: string,
   userId: string,
   action: TimerAction,
   now: Date = new Date(),
-): ApplyTaskTimerOutcome {
-  const db = getDb();
+): Promise<ApplyTaskTimerOutcome> {
+  const db = await getDb();
   const existing = db.tasks[id];
   if (!existing) {
     return { status: "not_found" };
@@ -492,6 +494,6 @@ export function applyTaskTimer(
       byUserId: userId,
     });
   }
-  saveDb(db);
+  await saveDb(db);
   return result;
 }

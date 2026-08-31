@@ -64,19 +64,19 @@ function jsonResponse(status: number, body: unknown) {
 // matters because a Response body can only be read once (mirrors the same
 // hazard documented in widgets/list/task-list.test.tsx).
 function stubFetchForListAction(handler: (url: string) => Promise<Response> | Response) {
-  const fetchMock = vi.fn((input: string | Request) => {
+  const fetchMock = vi.fn(async (input: string | Request) => {
     const url = input instanceof Request ? input.url : String(input);
     if (url.includes("/api/saved-filters")) {
       return Promise.resolve(jsonResponse(200, { data: { recent: [], saved: [] } }));
     }
-    return handler(url);
+    return await handler(url);
   });
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }
 
 beforeEach(() => {
-  stubFetchForListAction(() => Promise.reject(new Error("Unexpected fetch in DashboardListsPanel test")));
+  stubFetchForListAction(async () => await Promise.reject(new Error("Unexpected fetch in DashboardListsPanel test")));
 });
 
 afterEach(() => {
@@ -211,7 +211,7 @@ describe("DashboardListsPanel search and filters", () => {
     );
 
     await user.type(screen.getByTestId("list-filters-search"), "backend");
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(400);
     });
 
@@ -226,7 +226,7 @@ describe("DashboardListsPanel search and filters", () => {
     render(<DashboardListsPanel initialLists={[makeSummary({ id: "l1", title: "Спринт 34" })]} />);
 
     await user.type(screen.getByTestId("list-filters-search"), "no-such-list");
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(400);
     });
 
@@ -240,7 +240,7 @@ describe("DashboardListsPanel search and filters", () => {
     render(<DashboardListsPanel initialLists={[makeSummary({ id: "l1", title: "Спринт 34" })]} />);
 
     await user.type(screen.getByTestId("list-filters-search"), "no-such-list");
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(400);
     });
     expect(screen.getByTestId("lists-empty-filtered")).toBeInTheDocument();

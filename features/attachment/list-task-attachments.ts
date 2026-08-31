@@ -8,15 +8,16 @@ export type ListTaskAttachmentsOutcome =
   | { status: "not_found" }
   | { status: "ok"; attachments: AttachmentWithUploader[] };
 
-function toAttachmentWithUploader(attachment: Attachment): AttachmentWithUploader {
-  return { ...attachment, uploaderEmail: findUserById(attachment.uploadedBy)?.email ?? attachment.uploadedBy };
+async function toAttachmentWithUploader(attachment: Attachment): Promise<AttachmentWithUploader> {
+  return { ...attachment, uploaderEmail: (await findUserById(attachment.uploadedBy))?.email ?? attachment.uploadedBy };
 }
 
-export function listTaskAttachmentsForUser(userId: string, taskId: string): ListTaskAttachmentsOutcome {
-  const visible = getVisibleTask(userId, taskId);
+export async function listTaskAttachmentsForUser(userId: string, taskId: string): Promise<ListTaskAttachmentsOutcome> {
+  const visible = await getVisibleTask(userId, taskId);
   if (visible.status === "not_found") {
     return { status: "not_found" };
   }
 
-  return { status: "ok", attachments: listAttachmentsForTask(taskId).map(toAttachmentWithUploader) };
+  const attachments = await listAttachmentsForTask(taskId);
+  return { status: "ok", attachments: await Promise.all(attachments.map(toAttachmentWithUploader)) };
 }

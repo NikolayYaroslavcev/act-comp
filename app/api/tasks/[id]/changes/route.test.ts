@@ -12,12 +12,12 @@ function changesRequest(taskId: string, sessionId: string | undefined, since = "
   });
 }
 
-function callGet(taskId: string, request: NextRequest) {
-  return GET(request, { params: Promise.resolve({ id: taskId }) });
+async function callGet(taskId: string, request: NextRequest) {
+  return await GET(request, { params: Promise.resolve({ id: taskId }) });
 }
 
-function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
-  return createSession({
+async function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
+  return await createSession({
     userId,
     ip: `192.0.2.${suffix} (demo)`,
     device: "Chrome on Windows",
@@ -25,8 +25,8 @@ function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
   });
 }
 
-function makeTaskIn(listId: string) {
-  return createTask({
+async function makeTaskIn(listId: string) {
+  return await createTask({
     listId,
     title: "Task",
     description: "",
@@ -43,8 +43,8 @@ const T1 = "2026-08-30T10:00:00.000Z";
 
 describe("GET /api/tasks/[id]/changes", () => {
   it("returns 401 when no session cookie is present", async () => {
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callGet(task.id, changesRequest(task.id, undefined));
 
@@ -52,10 +52,10 @@ describe("GET /api/tasks/[id]/changes", () => {
   });
 
   it("returns 401 for a revoked session", async () => {
-    const session = sessionFor("u1", "600");
-    revokeSession(session.id);
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "600");
+    await revokeSession(session.id);
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callGet(task.id, changesRequest(task.id, session.id));
 
@@ -63,9 +63,9 @@ describe("GET /api/tasks/[id]/changes", () => {
   });
 
   it("returns 400 for a missing or malformed `since` parameter", async () => {
-    const session = sessionFor("u1", "601");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "601");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     expect((await callGet(task.id, changesRequest(task.id, session.id, ""))).status).toBe(400);
     const noSince = new NextRequest(`http://localhost/api/tasks/${task.id}/changes`, {
@@ -75,11 +75,11 @@ describe("GET /api/tasks/[id]/changes", () => {
   });
 
   it("returns changed:true for the owner when another shared-edit user changed the task", async () => {
-    const owner = sessionFor("u1", "602");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u3", access: "edit" });
-    const task = makeTaskIn(list.id);
-    updateTask(task.id, "u3", { priority: 5 }, new Date(T1));
+    const owner = await sessionFor("u1", "602");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u3", access: "edit" });
+    const task = await makeTaskIn(list.id);
+    await updateTask(task.id, "u3", { priority: 5 }, new Date(T1));
 
     const response = await callGet(task.id, changesRequest(task.id, owner.id));
 
@@ -92,10 +92,10 @@ describe("GET /api/tasks/[id]/changes", () => {
   });
 
   it("does not report the requesting user's own change", async () => {
-    const session = sessionFor("u1", "603");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    updateTask(task.id, "u1", { priority: 5 }, new Date(T1));
+    const session = await sessionFor("u1", "603");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    await updateTask(task.id, "u1", { priority: 5 }, new Date(T1));
 
     const response = await callGet(task.id, changesRequest(task.id, session.id));
 
@@ -104,9 +104,9 @@ describe("GET /api/tasks/[id]/changes", () => {
   });
 
   it("returns 404 for another user's private task", async () => {
-    const session = sessionFor("u2", "604");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u2", "604");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callGet(task.id, changesRequest(task.id, session.id));
 
@@ -114,10 +114,10 @@ describe("GET /api/tasks/[id]/changes", () => {
   });
 
   it("returns 404 for a soft-deleted task", async () => {
-    const session = sessionFor("u1", "605");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    insertTasks([{ ...task, deletedAt: "2026-08-31T00:00:00.000Z" }]);
+    const session = await sessionFor("u1", "605");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    await insertTasks([{ ...task, deletedAt: "2026-08-31T00:00:00.000Z" }]);
 
     const response = await callGet(task.id, changesRequest(task.id, session.id));
 
@@ -125,7 +125,7 @@ describe("GET /api/tasks/[id]/changes", () => {
   });
 
   it("returns 404 for an unknown task", async () => {
-    const session = sessionFor("u1", "606");
+    const session = await sessionFor("u1", "606");
 
     const response = await callGet("does-not-exist", changesRequest("does-not-exist", session.id));
 
@@ -133,9 +133,9 @@ describe("GET /api/tasks/[id]/changes", () => {
   });
 
   it("ignores a spoofed userId query parameter and uses the session user", async () => {
-    const session = sessionFor("u2", "607");
-    const list = createList("u1", { title: "Private", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u2", "607");
+    const list = await createList("u1", { title: "Private", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const request = new NextRequest(
       `http://localhost/api/tasks/${task.id}/changes?since=2026-08-30T09:00:00.000Z&userId=u1`,

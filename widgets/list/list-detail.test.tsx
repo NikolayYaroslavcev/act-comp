@@ -197,7 +197,7 @@ describe("ListDetail export of the current filtered view", () => {
   it("exports only tasks that match the applied search", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (url: string) => {
+      vi.fn((url: string) => {
         if (url.startsWith("/api/saved-filters")) {
           return new Response(JSON.stringify({ data: { recent: [], saved: [] } }), {
             status: 200,

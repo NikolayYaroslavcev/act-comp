@@ -18,12 +18,12 @@ function pdfRequest(id: string, sessionId: string | undefined, body?: unknown) {
   });
 }
 
-function callExport(id: string, request: NextRequest) {
-  return POST(request, { params: Promise.resolve({ id }) });
+async function callExport(id: string, request: NextRequest) {
+  return await POST(request, { params: Promise.resolve({ id }) });
 }
 
-function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
-  return createSession({
+async function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
+  return await createSession({
     userId,
     ip: `192.0.2.${suffix} (demo)`,
     device: "Chrome on Windows",
@@ -33,14 +33,14 @@ function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
 
 describe("POST /api/lists/[id]/export/pdf", () => {
   it("returns 401 when no session cookie is present", async () => {
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
     const response = await callExport(list.id, pdfRequest(list.id, undefined, {}));
     expect(response.status).toBe(401);
   });
 
   it("returns 404 for an inaccessible list without leaking it", async () => {
-    const session = sessionFor("u2", "80");
-    const list = createList("u1", { title: "Private", template: "work", deadline: null });
+    const session = await sessionFor("u2", "80");
+    const list = await createList("u1", { title: "Private", template: "work", deadline: null });
     const response = await callExport(list.id, pdfRequest(list.id, session.id, {}));
     expect(response.status).toBe(404);
     const json = await response.json();
@@ -48,9 +48,9 @@ describe("POST /api/lists/[id]/export/pdf", () => {
   });
 
   it("returns a PDF for the owner containing only requested visible tasks", async () => {
-    const session = sessionFor("u1", "81");
-    const list = createList("u1", { title: "Спринт", template: "work", deadline: null });
-    const keep = createTask({
+    const session = await sessionFor("u1", "81");
+    const list = await createList("u1", { title: "Спринт", template: "work", deadline: null });
+    const keep = await createTask({
       listId: list.id,
       title: "Keep me",
       description: "",
@@ -61,7 +61,7 @@ describe("POST /api/lists/[id]/export/pdf", () => {
       deadline: null,
       estimatedMin: 0,
     });
-    const skip = createTask({
+    const skip = await createTask({
       listId: list.id,
       title: "Skip me",
       description: "",
@@ -84,9 +84,9 @@ describe("POST /api/lists/[id]/export/pdf", () => {
   });
 
   it("allows a shared reader to export", async () => {
-    const session = sessionFor("u2", "82");
-    const list = createList("u1", { title: "Shared", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "read" });
+    const session = await sessionFor("u2", "82");
+    const list = await createList("u1", { title: "Shared", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "read" });
     const response = await callExport(list.id, pdfRequest(list.id, session.id, {}));
     expect(response.status).toBe(200);
   });

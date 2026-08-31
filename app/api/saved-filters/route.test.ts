@@ -26,12 +26,12 @@ function postSavedFiltersRequest(sessionId: string | undefined, body: unknown) {
 
 // The seed data only defines users u1/u2/u3 (see data.json) — reuse those
 // ids rather than inventing arbitrary owner ids (mirrors app/api/tasks/route.test.ts).
-function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
-  return createSession({ userId, ip: `192.0.2.${suffix} (demo)`, device: "Chrome on Windows", rememberMe: false });
+async function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
+  return await createSession({ userId, ip: `192.0.2.${suffix} (demo)`, device: "Chrome on Windows", rememberMe: false });
 }
 
-beforeEach(() => {
-  getDb().savedFilters = {};
+beforeEach(async () => {
+  (await getDb()).savedFilters = {};
 });
 
 describe("GET /api/saved-filters", () => {
@@ -41,14 +41,14 @@ describe("GET /api/saved-filters", () => {
   });
 
   it("returns 400 for an unsupported scope", async () => {
-    const session = sessionFor("u1", "90");
+    const session = await sessionFor("u1", "90");
     const response = await GET(savedFiltersRequest(session.id, "?scope=bogus"));
     expect(response.status).toBe(400);
   });
 
   it("supports the lists scope, returning only that scope's saved filters", async () => {
-    const session = sessionFor("u1", "91");
-    getDb().savedFilters = {
+    const session = await sessionFor("u1", "91");
+    (await getDb()).savedFilters = {
       taskFilter: {
         id: "taskFilter",
         userId: "u1",
@@ -73,8 +73,8 @@ describe("GET /api/saved-filters", () => {
   });
 
   it("returns only the caller's own filters", async () => {
-    const session = sessionFor("u1", "92");
-    getDb().savedFilters = {
+    const session = await sessionFor("u1", "92");
+    (await getDb()).savedFilters = {
       mine: {
         id: "mine",
         userId: "u1",
@@ -107,13 +107,13 @@ describe("POST /api/saved-filters", () => {
   });
 
   it("returns 400 for an invalid body", async () => {
-    const session = sessionFor("u1", "93");
+    const session = await sessionFor("u1", "93");
     const response = await POST(postSavedFiltersRequest(session.id, { action: "nonsense" }));
     expect(response.status).toBe(400);
   });
 
   it("applies a filter as a recent (unsaved) entry scoped to the caller", async () => {
-    const session = sessionFor("u1", "94");
+    const session = await sessionFor("u1", "94");
     const response = await POST(
       postSavedFiltersRequest(session.id, {
         action: "apply",
@@ -127,7 +127,7 @@ describe("POST /api/saved-filters", () => {
   });
 
   it("saves a filter with a label", async () => {
-    const session = sessionFor("u1", "95");
+    const session = await sessionFor("u1", "95");
     const response = await POST(
       postSavedFiltersRequest(session.id, { action: "save", criteria: EMPTY_TASK_FILTER_CRITERIA, label: "Mine" }),
     );
@@ -136,7 +136,7 @@ describe("POST /api/saved-filters", () => {
   });
 
   it("applies a list filter under the lists scope when scope is provided", async () => {
-    const session = sessionFor("u1", "95a");
+    const session = await sessionFor("u1", "95a");
     const response = await POST(
       postSavedFiltersRequest(session.id, {
         action: "apply",
@@ -151,7 +151,7 @@ describe("POST /api/saved-filters", () => {
   });
 
   it("saves a list filter with a label under the lists scope", async () => {
-    const session = sessionFor("u1", "95b");
+    const session = await sessionFor("u1", "95b");
     const response = await POST(
       postSavedFiltersRequest(session.id, {
         action: "save",
@@ -167,7 +167,7 @@ describe("POST /api/saved-filters", () => {
   });
 
   it("rejects list-scoped criteria that do not match the list filter shape", async () => {
-    const session = sessionFor("u1", "95c");
+    const session = await sessionFor("u1", "95c");
     const response = await POST(
       postSavedFiltersRequest(session.id, {
         action: "apply",
@@ -179,7 +179,7 @@ describe("POST /api/saved-filters", () => {
   });
 
   it("defaults to the tasks scope when scope is omitted, preserving prior behaviour", async () => {
-    const session = sessionFor("u1", "95d");
+    const session = await sessionFor("u1", "95d");
     const response = await POST(
       postSavedFiltersRequest(session.id, { action: "apply", criteria: EMPTY_TASK_FILTER_CRITERIA }),
     );
@@ -189,8 +189,8 @@ describe("POST /api/saved-filters", () => {
 
   describe("touch action", () => {
     it("updates usedAt on the caller's own filter and returns 200", async () => {
-      const session = sessionFor("u1", "96");
-      getDb().savedFilters = {
+      const session = await sessionFor("u1", "96");
+      (await getDb()).savedFilters = {
         mine: {
           id: "mine",
           userId: "u1",
@@ -207,8 +207,8 @@ describe("POST /api/saved-filters", () => {
     });
 
     it("returns 404 for a filter owned by another user", async () => {
-      const session = sessionFor("u2", "97");
-      getDb().savedFilters = {
+      const session = await sessionFor("u2", "97");
+      (await getDb()).savedFilters = {
         mine: {
           id: "mine",
           userId: "u1",
@@ -223,7 +223,7 @@ describe("POST /api/saved-filters", () => {
     });
 
     it("returns 404 for a missing id", async () => {
-      const session = sessionFor("u1", "98");
+      const session = await sessionFor("u1", "98");
       const response = await POST(postSavedFiltersRequest(session.id, { action: "touch", id: "missing" }));
       expect(response.status).toBe(404);
     });

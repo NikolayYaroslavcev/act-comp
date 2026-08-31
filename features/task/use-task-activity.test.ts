@@ -74,7 +74,7 @@ describe("useTaskActivity", () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
     expect(result.current.loadError).toBeTruthy();
 
-    await act(async () => {
+    await act(() => {
       result.current.reload();
     });
 
@@ -94,7 +94,7 @@ describe("useTaskActivity", () => {
     expect(result.current.activity).toEqual([]);
 
     const { activityApi } = await import("@/features/activity/activity-api");
-    await act(async () => {
+    await act(() => {
       store.dispatch(activityApi.util.invalidateTags([{ type: "Activity", id: "t1" }]));
     });
 

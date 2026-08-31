@@ -6,17 +6,17 @@ import { recordActivity } from "@/entities/activity/repository";
 
 export type DeleteTaskAttachmentOutcome = { status: "not_found" } | { status: "forbidden" } | { status: "ok" };
 
-export function deleteTaskAttachmentForUser(
+export async function deleteTaskAttachmentForUser(
   userId: string,
   taskId: string,
   attachmentId: string,
-): DeleteTaskAttachmentOutcome {
-  const task = findTaskById(taskId);
+): Promise<DeleteTaskAttachmentOutcome> {
+  const task = await findTaskById(taskId);
   if (!task || task.deletedAt !== null) {
     return { status: "not_found" };
   }
 
-  const list = findListById(task.listId);
+  const list = await findListById(task.listId);
   if (!list || list.deletedAt !== null || !canViewList(list, userId)) {
     return { status: "not_found" };
   }
@@ -25,14 +25,14 @@ export function deleteTaskAttachmentForUser(
     return { status: "forbidden" };
   }
 
-  const attachment = findAttachmentById(attachmentId);
+  const attachment = await findAttachmentById(attachmentId);
   if (!attachment || attachment.taskId !== taskId) {
     return { status: "not_found" };
   }
 
-  deleteAttachment(attachmentId);
+  await deleteAttachment(attachmentId);
 
-  recordActivity({
+  await recordActivity({
     entityType: "task",
     entityId: taskId,
     action: "attachment_deleted",

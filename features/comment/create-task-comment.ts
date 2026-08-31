@@ -16,17 +16,17 @@ export type CreateTaskCommentOutcome =
 // same reasoning as cloneTaskForUser (features/task/clone-task.ts): a
 // comment is a mutation on the task, so it needs the write permission other
 // task mutations require, not the read permission getVisibleTask allows.
-export function createTaskCommentForUser(
+export async function createTaskCommentForUser(
   userId: string,
   taskId: string,
   input: CreateCommentInput,
-): CreateTaskCommentOutcome {
-  const task = findTaskById(taskId);
+): Promise<CreateTaskCommentOutcome> {
+  const task = await findTaskById(taskId);
   if (!task || task.deletedAt !== null) {
     return { status: "not_found" };
   }
 
-  const list = findListById(task.listId);
+  const list = await findListById(task.listId);
   if (!list || list.deletedAt !== null || !canViewList(list, userId)) {
     return { status: "not_found" };
   }
@@ -35,12 +35,12 @@ export function createTaskCommentForUser(
     return { status: "forbidden" };
   }
 
-  const comment = createComment({ taskId, authorId: userId, text: input.text });
+  const comment = await createComment({ taskId, authorId: userId, text: input.text });
 
   const extension = parseTimeExtension(input.text);
   if (extension) {
-    applyTaskExtension(taskId, userId, { commentId: comment.id, addedMin: extension.addedMin });
+    await applyTaskExtension(taskId, userId, { commentId: comment.id, addedMin: extension.addedMin });
   }
 
-  return { status: "ok", comment: { ...comment, authorEmail: findUserById(userId)?.email ?? userId } };
+  return { status: "ok", comment: { ...comment, authorEmail: (await findUserById(userId))?.email ?? userId } };
 }

@@ -8,13 +8,13 @@ import { deleteTaskAttachmentForUser } from "@/features/attachment/delete-task-a
 type RouteContext = { params: Promise<{ id: string; fileId: string }> };
 
 export async function GET(request: NextRequest, { params }: RouteContext) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if (!auth.authorized) {
     return jsonError(401, "Unauthorized");
   }
 
   const { id, fileId } = await params;
-  const result = downloadTaskAttachmentForUser(auth.user.id, id, fileId);
+  const result = await downloadTaskAttachmentForUser(auth.user.id, id, fileId);
   if (result.status === "not_found") {
     return jsonError(404, "File not found");
   }
@@ -32,13 +32,13 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 }
 
 export async function DELETE(request: NextRequest, { params }: RouteContext) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if (!auth.authorized) {
     return jsonError(401, "Unauthorized");
   }
 
   const { id, fileId } = await params;
-  const result = deleteTaskAttachmentForUser(auth.user.id, id, fileId);
+  const result = await deleteTaskAttachmentForUser(auth.user.id, id, fileId);
   switch (result.status) {
     case "not_found":
       return jsonError(404, "File not found");

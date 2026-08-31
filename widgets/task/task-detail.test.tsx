@@ -29,12 +29,12 @@ function urlOf(arg: unknown): string {
 }
 
 function stubFetchForTaskAction(handler: (url: string, init?: RequestInit) => Promise<Response> | Response) {
-  const fetchMock = vi.fn((input: string | Request, init?: RequestInit) => {
+  const fetchMock = vi.fn(async (input: string | Request, init?: RequestInit) => {
     const url = urlOf(input);
     if (url.endsWith("/comments") || url.endsWith("/activity") || url.endsWith("/files")) {
       return Promise.resolve(jsonResponse(200, { data: [] }));
     }
-    return handler(url, init);
+    return await handler(url, init);
   });
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
@@ -1147,7 +1147,7 @@ describe("TaskDetail inline edit", () => {
     fireEvent.change(title, { target: { value: "Новое" } });
     expect(screen.queryByTestId("task-inline-title-status")).not.toHaveTextContent("Сохранение");
 
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(INLINE_TASK_AUTOSAVE_MS);
     });
     await act(async () => {
@@ -1172,12 +1172,12 @@ describe("TaskDetail inline edit", () => {
 
     fireEvent.change(screen.getByRole("textbox", { name: "Название" }), { target: { value: "Аб" } });
     fireEvent.change(screen.getByRole("textbox", { name: "Название" }), { target: { value: "Абв" } });
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(INLINE_TASK_AUTOSAVE_MS - 1);
     });
     expect(fetchMock.mock.calls.filter(([, init]) => init?.method === "PATCH")).toHaveLength(0);
 
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(1);
     });
     await act(async () => {
@@ -1216,13 +1216,13 @@ describe("TaskDetail inline edit", () => {
     fireEvent.change(screen.getByLabelText("Оценка времени"), { target: { value: "80" } });
     fireEvent.click(screen.getByRole("radio", { name: "Готово" }));
     fireEvent.click(screen.getByLabelText("Дедлайн"));
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(50);
     });
     const dayButtons = document.querySelectorAll("button[data-day]:not([disabled])");
     fireEvent.click(dayButtons[dayButtons.length - 1]);
 
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(INLINE_TASK_AUTOSAVE_MS);
     });
     await act(async () => {
@@ -1254,7 +1254,7 @@ describe("TaskDetail inline edit", () => {
     );
 
     fireEvent.change(screen.getByRole("textbox", { name: "Название" }), { target: { value: "" } });
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(INLINE_TASK_AUTOSAVE_MS);
     });
 
@@ -1277,7 +1277,7 @@ describe("TaskDetail inline edit", () => {
     );
 
     fireEvent.change(screen.getByRole("textbox", { name: "Название" }), { target: { value: "Станет" } });
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(INLINE_TASK_AUTOSAVE_MS);
     });
     await act(async () => {
@@ -1296,7 +1296,7 @@ describe("TaskDetail inline edit", () => {
     );
 
     fireEvent.change(screen.getByRole("textbox", { name: "Название" }), { target: { value: "Офлайн" } });
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(INLINE_TASK_AUTOSAVE_MS);
     });
     await act(async () => {
@@ -1347,7 +1347,7 @@ describe("TaskDetail inline edit", () => {
     expect(onOpenChange).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
 
-    await act(async () => {
+    await act(() => {
       vi.advanceTimersByTime(INLINE_TASK_AUTOSAVE_MS);
     });
     await act(async () => {

@@ -7,16 +7,16 @@ import { requireAuth } from "@/features/auth/require-auth";
 import { createList } from "@/features/list/create-list";
 
 export async function GET(request: NextRequest) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if (!auth.authorized) {
     return jsonError(401, "Unauthorized");
   }
 
-  return jsonOk(selectVisibleLists(listLists(), auth.user.id));
+  return jsonOk(selectVisibleLists(await listLists(), auth.user.id));
 }
 
 export async function POST(request: NextRequest) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if (!auth.authorized) {
     return jsonError(401, "Unauthorized");
   }
@@ -31,5 +31,5 @@ export async function POST(request: NextRequest) {
     return jsonError(400, "Validation failed", parsed.error.issues);
   }
 
-  return jsonOk(createList(auth.user.id, parsed.data), 201);
+  return jsonOk(await createList(auth.user.id, parsed.data), 201);
 }

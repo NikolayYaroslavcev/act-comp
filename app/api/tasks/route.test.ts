@@ -38,8 +38,8 @@ function createTaskRequestWithRawBody(sessionId: string, rawBody: string) {
 // The seed data only defines users u1/u2/u3 (see data.json) — requireAuth
 // resolves a session to a real user, so tests must reuse those ids rather
 // than inventing arbitrary owner ids.
-function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
-  return createSession({
+async function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
+  return await createSession({
     userId,
     ip: `192.0.2.${suffix} (demo)`,
     device: "Chrome on Windows",
@@ -61,9 +61,9 @@ describe("GET /api/tasks", () => {
   });
 
   it("returns 200 with only the tasks accessible to the session's user", async () => {
-    const session = sessionFor("u1", "70");
-    const ownList = createList("u1", { title: "Mine", template: "work", deadline: null });
-    const strangerList = createList("u2", { title: "Not mine", template: "work", deadline: null });
+    const session = await sessionFor("u1", "70");
+    const ownList = await createList("u1", { title: "Mine", template: "work", deadline: null });
+    const strangerList = await createList("u2", { title: "Not mine", template: "work", deadline: null });
 
     const ownResponse = await POST(
       createTaskRequest(session.id, { listId: ownList.id, title: "Owned task" }),
@@ -76,11 +76,11 @@ describe("GET /api/tasks", () => {
     const json = await response.json();
     const ids: string[] = json.data.map((task: { id: string }) => task.id);
     expect(ids).toContain(ownJson.data.id);
-    expect(findListById(strangerList.id)).toBeDefined();
+    expect(await findListById(strangerList.id)).toBeDefined();
   });
 
   it("returns an empty list for a user with no accessible tasks", async () => {
-    const session = sessionFor("u3", "71");
+    const session = await sessionFor("u3", "71");
 
     const response = await GET(tasksRequest(session.id));
 
@@ -92,7 +92,7 @@ describe("GET /api/tasks", () => {
 
 describe("POST /api/tasks", () => {
   it("returns 401 when no session cookie is present", async () => {
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
 
     const response = await POST(createTaskRequest(undefined, { listId: list.id, title: "Task" }));
 
@@ -100,7 +100,7 @@ describe("POST /api/tasks", () => {
   });
 
   it("returns 400 for invalid JSON", async () => {
-    const session = sessionFor("u1", "80");
+    const session = await sessionFor("u1", "80");
 
     const response = await POST(createTaskRequestWithRawBody(session.id, "{ not json"));
 
@@ -108,8 +108,8 @@ describe("POST /api/tasks", () => {
   });
 
   it("returns 400 for a Zod validation error", async () => {
-    const session = sessionFor("u1", "81");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
+    const session = await sessionFor("u1", "81");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
 
     const response = await POST(
       createTaskRequest(session.id, { listId: list.id, title: "", priority: 3 }),
@@ -121,7 +121,7 @@ describe("POST /api/tasks", () => {
   });
 
   it("returns 404 when the listId does not reference a list", async () => {
-    const session = sessionFor("u1", "82");
+    const session = await sessionFor("u1", "82");
 
     const response = await POST(
       createTaskRequest(session.id, { listId: "does-not-exist", title: "Task" }),
@@ -131,8 +131,8 @@ describe("POST /api/tasks", () => {
   });
 
   it("returns 403 when the user has no edit access to the list", async () => {
-    const session = sessionFor("u2", "83");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
+    const session = await sessionFor("u2", "83");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
 
     const response = await POST(
       createTaskRequest(session.id, { listId: list.id, title: "Task" }),
@@ -142,8 +142,8 @@ describe("POST /api/tasks", () => {
   });
 
   it("creates a task for the owner on valid input", async () => {
-    const session = sessionFor("u1", "84");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
+    const session = await sessionFor("u1", "84");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
 
     const response = await POST(
       createTaskRequest(session.id, { listId: list.id, title: "New task" }),
@@ -154,13 +154,13 @@ describe("POST /api/tasks", () => {
     expect(json.data.listId).toBe(list.id);
     expect(json.data.title).toBe("New task");
     expect(json.data.code).toMatch(/^TEST-\d+$/);
-    expect(findTaskById(json.data.id)).toBeDefined();
+    expect(await findTaskById(json.data.id)).toBeDefined();
   });
 
   it("applies the creating user's settings.taskDefaults when priority/category/estimatedMin are omitted", async () => {
-    const session = sessionFor("u1", "84a");
-    updateUserSettings("u1", { taskDefaults: { priority: 5, category: "Backend", estimatedMin: 45 } });
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
+    const session = await sessionFor("u1", "84a");
+    await updateUserSettings("u1", { taskDefaults: { priority: 5, category: "Backend", estimatedMin: 45 } });
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
 
     const response = await POST(createTaskRequest(session.id, { listId: list.id, title: "New task" }));
 
@@ -172,9 +172,9 @@ describe("POST /api/tasks", () => {
   });
 
   it("respects explicit priority/category/estimatedMin over the user's taskDefaults", async () => {
-    const session = sessionFor("u1", "84b");
-    updateUserSettings("u1", { taskDefaults: { priority: 5, category: "Backend", estimatedMin: 45 } });
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
+    const session = await sessionFor("u1", "84b");
+    await updateUserSettings("u1", { taskDefaults: { priority: 5, category: "Backend", estimatedMin: 45 } });
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
 
     const response = await POST(
       createTaskRequest(session.id, {
@@ -194,9 +194,9 @@ describe("POST /api/tasks", () => {
   });
 
   it("allows an edit-access shared user to create a task", async () => {
-    const session = sessionFor("u2", "85");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "edit" });
+    const session = await sessionFor("u2", "85");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "edit" });
 
     const response = await POST(
       createTaskRequest(session.id, { listId: list.id, title: "New task" }),
@@ -206,8 +206,8 @@ describe("POST /api/tasks", () => {
   });
 
   it("ignores a client-supplied ownerId/userId and does not let it affect the outcome", async () => {
-    const session = sessionFor("u2", "86");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
+    const session = await sessionFor("u2", "86");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
 
     const response = await POST(
       createTaskRequest(session.id, {
@@ -222,11 +222,11 @@ describe("POST /api/tasks", () => {
   });
 
   it("returns 400 when parentId points at a task in another list", async () => {
-    const session = sessionFor("u1", "87");
-    const listA = createList("u1", { title: "A", template: "work", deadline: null });
-    const listB = createList("u2", { title: "B", template: "work", deadline: null });
+    const session = await sessionFor("u1", "87");
+    const listA = await createList("u1", { title: "A", template: "work", deadline: null });
+    const listB = await createList("u2", { title: "B", template: "work", deadline: null });
     const parentResponse = await POST(
-      createTaskRequest(sessionFor("u2", "88").id, { listId: listB.id, title: "B parent" }),
+      createTaskRequest((await sessionFor("u2", "88")).id, { listId: listB.id, title: "B parent" }),
     );
     const parentJson = await parentResponse.json();
 
@@ -235,12 +235,12 @@ describe("POST /api/tasks", () => {
     );
 
     expect(response.status).toBe(400);
-    expect(findTaskById(parentJson.data.id)!.subtaskIds).toEqual([]);
+    expect((await findTaskById(parentJson.data.id))!.subtaskIds).toEqual([]);
   });
 
   it("creates a child under a same-list parent", async () => {
-    const session = sessionFor("u1", "89");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
+    const session = await sessionFor("u1", "89");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
     const parentResponse = await POST(
       createTaskRequest(session.id, { listId: list.id, title: "Parent" }),
     );

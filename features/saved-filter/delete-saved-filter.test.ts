@@ -4,13 +4,13 @@ import { upsertAppliedFilter } from "@/entities/saved-filter/repository";
 import { EMPTY_TASK_FILTER_CRITERIA } from "@/entities/saved-filter/query-schema";
 import { deleteSavedFilterForUser } from "./delete-saved-filter";
 
-beforeEach(() => {
-  getDb().savedFilters = {};
+beforeEach(async () => {
+  (await getDb()).savedFilters = {};
 });
 
 describe("deleteSavedFilterForUser", () => {
-  it("deletes the caller's own filter", () => {
-    const created = upsertAppliedFilter({
+  it("deletes the caller's own filter", async () => {
+    const created = await upsertAppliedFilter({
       userId: "u1",
       scope: "tasks",
       criteria: EMPTY_TASK_FILTER_CRITERIA,
@@ -18,11 +18,11 @@ describe("deleteSavedFilterForUser", () => {
       label: null,
     });
 
-    expect(deleteSavedFilterForUser("u1", created.id)).toEqual({ status: "ok" });
+    expect(await deleteSavedFilterForUser("u1", created.id)).toEqual({ status: "ok" });
   });
 
-  it("refuses to delete another user's filter", () => {
-    const created = upsertAppliedFilter({
+  it("refuses to delete another user's filter", async () => {
+    const created = await upsertAppliedFilter({
       userId: "u1",
       scope: "tasks",
       criteria: EMPTY_TASK_FILTER_CRITERIA,
@@ -30,6 +30,6 @@ describe("deleteSavedFilterForUser", () => {
       label: null,
     });
 
-    expect(deleteSavedFilterForUser("u2", created.id)).toEqual({ status: "not_found" });
+    expect(await deleteSavedFilterForUser("u2", created.id)).toEqual({ status: "not_found" });
   });
 });

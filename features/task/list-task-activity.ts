@@ -5,15 +5,18 @@ import { getVisibleTask } from "@/features/task/get-task";
 
 export type ListTaskActivityOutcome = { status: "not_found" } | { status: "ok"; activity: TaskActivityItem[] };
 
-function toActivityItem(entry: ReturnType<typeof listActivityForTask>[number]): TaskActivityItem {
-  return { ...entry, actorEmail: findUserById(entry.byUserId)?.email ?? entry.byUserId };
+async function toActivityItem(
+  entry: Awaited<ReturnType<typeof listActivityForTask>>[number],
+): Promise<TaskActivityItem> {
+  return { ...entry, actorEmail: (await findUserById(entry.byUserId))?.email ?? entry.byUserId };
 }
 
-export function listTaskActivityForUser(userId: string, taskId: string): ListTaskActivityOutcome {
-  const visible = getVisibleTask(userId, taskId);
+export async function listTaskActivityForUser(userId: string, taskId: string): Promise<ListTaskActivityOutcome> {
+  const visible = await getVisibleTask(userId, taskId);
   if (visible.status === "not_found") {
     return { status: "not_found" };
   }
 
-  return { status: "ok", activity: listActivityForTask(taskId).map(toActivityItem) };
+  const entries = await listActivityForTask(taskId);
+  return { status: "ok", activity: await Promise.all(entries.map(toActivityItem)) };
 }

@@ -6,13 +6,13 @@ import { restoreTaskForUser } from "@/features/task/restore-task";
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function POST(request: NextRequest, { params }: RouteContext) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if (!auth.authorized) {
     return jsonError(401, "Unauthorized");
   }
 
   const { id } = await params;
-  const result = restoreTaskForUser(auth.user.id, id);
+  const result = await restoreTaskForUser(auth.user.id, id);
   switch (result.status) {
     case "not_found":
       return jsonError(404, "Task not found");

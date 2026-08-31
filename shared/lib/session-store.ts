@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
+import { put, get } from "@vercel/blob";
 import data from "@/data.json";
 import { sessionSchema, type Session } from "@/entities/session/schema";
 
@@ -8,9 +9,9 @@ const sessionsRecordSchema = z.record(z.string(), sessionSchema);
 type SessionsRecord = z.infer<typeof sessionsRecordSchema>;
 
 export interface SessionStore {
-  getSession(id: string): Session | undefined;
-  putSession(session: Session): void;
-  getSessionsByUserId(userId: string): Session[];
+  getSession(id: string): Promise<Session | undefined>;
+  putSession(session: Session): Promise<void>;
+  getSessionsByUserId(userId: string): Promise<Session[]>;
 }
 
 function seedSessions(): SessionsRecord {
@@ -28,6 +29,9 @@ function seedSessions(): SessionsRecord {
  *
  * No locking: fine for this app's scale (single local Node process, low
  * concurrency), not a substitute for a real datastore under real load.
+ *
+ * Only usable on a host with a persistent, shared filesystem — see
+ * `createBlobSessionStore` for serverless deployments.
  */
 export function createFileSessionStore(filePath: string): SessionStore {
   function readAll(): SessionsRecord {
@@ -51,16 +55,60 @@ export function createFileSessionStore(filePath: string): SessionStore {
   }
 
   return {
-    getSession(id) {
+    async getSession(id) {
       return readAll()[id];
     },
-    putSession(session) {
+    async putSession(session) {
       const sessions = readAll();
       sessions[session.id] = session;
       writeAll(sessions);
     },
-    getSessionsByUserId(userId) {
+    async getSessionsByUserId(userId) {
       return Object.values(readAll()).filter((session) => session.userId === userId);
+    },
+  };
+}
+
+/**
+ * Vercel Blob-backed session store, for serverless deployments where each
+ * function invocation gets its own ephemeral filesystem — a session written
+ * by the login route wouldn't otherwise be visible to the next request.
+ * Same whole-document read-modify-write semantics as `createFileSessionStore`.
+ */
+export function createBlobSessionStore(pathname: string): SessionStore {
+  async function readAll(): Promise<SessionsRecord> {
+    const result = await get(pathname, { access: "private" });
+
+    if (!result || result.statusCode !== 200) {
+      const seeded = seedSessions();
+      await writeAll(seeded);
+      return seeded;
+    }
+
+    const raw = await new Response(result.stream).text();
+    return sessionsRecordSchema.parse(JSON.parse(raw));
+  }
+
+  async function writeAll(sessions: SessionsRecord): Promise<void> {
+    await put(pathname, JSON.stringify(sessions), {
+      access: "private",
+      addRandomSuffix: false,
+      allowOverwrite: true,
+      contentType: "application/json",
+    });
+  }
+
+  return {
+    async getSession(id) {
+      return (await readAll())[id];
+    },
+    async putSession(session) {
+      const sessions = await readAll();
+      sessions[session.id] = session;
+      await writeAll(sessions);
+    },
+    async getSessionsByUserId(userId) {
+      return Object.values(await readAll()).filter((session) => session.userId === userId);
     },
   };
 }
@@ -77,13 +125,13 @@ function createMemorySessionStore(): SessionStore {
   }
 
   return {
-    getSession(id) {
+    async getSession(id) {
       return ensure()[id];
     },
-    putSession(session) {
+    async putSession(session) {
       ensure()[session.id] = session;
     },
-    getSessionsByUserId(userId) {
+    async getSessionsByUserId(userId) {
       return Object.values(ensure()).filter((session) => session.userId === userId);
     },
   };
@@ -91,6 +139,14 @@ function createMemorySessionStore(): SessionStore {
 
 const DEFAULT_STATE_PATH = path.join(process.cwd(), ".local-state", "sessions.json");
 
-export const sessionStore: SessionStore = process.env.VITEST
-  ? createMemorySessionStore()
-  : createFileSessionStore(DEFAULT_STATE_PATH);
+function createSessionStore(): SessionStore {
+  if (process.env.VITEST) {
+    return createMemorySessionStore();
+  }
+  if (process.env.BLOB_READ_WRITE_TOKEN) {
+    return createBlobSessionStore("sessions.json");
+  }
+  return createFileSessionStore(DEFAULT_STATE_PATH);
+}
+
+export const sessionStore: SessionStore = createSessionStore();

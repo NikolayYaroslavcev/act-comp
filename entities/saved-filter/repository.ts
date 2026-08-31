@@ -41,8 +41,8 @@ function areCriteriaEqualForScope(
     : areTaskFilterCriteriaEqual(a as TaskFilterCriteria, b as TaskFilterCriteria);
 }
 
-export function listSavedFilters(userId: string, scope: SavedFilterScope): SavedFilter[] {
-  return Object.values(getDb().savedFilters)
+export async function listSavedFilters(userId: string, scope: SavedFilterScope): Promise<SavedFilter[]> {
+  return Object.values((await getDb()).savedFilters)
     .filter((filter) => filter.userId === userId && filter.scope === scope)
     .filter((filter) => safeParseQueryForScope(scope, filter) !== null)
     .sort((a, b) => new Date(b.usedAt).getTime() - new Date(a.usedAt).getTime());
@@ -96,8 +96,8 @@ function trimRecentFilters(db: Database, userId: string, scope: SavedFilterScope
  * Constraints for why one entity backs both UX concepts. Works for any
  * scope: normalization/equality/parsing are dispatched by input.scope.
  */
-export function upsertAppliedFilter(input: UpsertFilterInput, now: Date = new Date()): SavedFilter {
-  const db = getDb();
+export async function upsertAppliedFilter(input: UpsertFilterInput, now: Date = new Date()): Promise<SavedFilter> {
+  const db = await getDb();
   const normalized = normalizeCriteriaForScope(input.scope, input.criteria);
   const nowIso = now.toISOString();
   const query = { ...normalized, saved: input.saved, label: input.label };
@@ -106,7 +106,7 @@ export function upsertAppliedFilter(input: UpsertFilterInput, now: Date = new Da
   if (existing) {
     const updated: SavedFilter = { ...existing, query, usedAt: nowIso };
     db.savedFilters[updated.id] = updated;
-    saveDb(db);
+    await saveDb(db);
     return updated;
   }
 
@@ -123,21 +123,21 @@ export function upsertAppliedFilter(input: UpsertFilterInput, now: Date = new Da
     trimRecentFilters(db, input.userId, input.scope);
   }
 
-  saveDb(db);
+  await saveDb(db);
   return created;
 }
 
 export type DeleteSavedFilterOutcome = { status: "not_found" } | { status: "ok" };
 
-export function deleteSavedFilter(userId: string, id: string): DeleteSavedFilterOutcome {
-  const db = getDb();
+export async function deleteSavedFilter(userId: string, id: string): Promise<DeleteSavedFilterOutcome> {
+  const db = await getDb();
   const existing = db.savedFilters[id];
   if (!existing || existing.userId !== userId) {
     return { status: "not_found" };
   }
 
   delete db.savedFilters[id];
-  saveDb(db);
+  await saveDb(db);
   return { status: "ok" };
 }
 
@@ -151,8 +151,8 @@ export type TouchSavedFilterOutcome = { status: "not_found" } | { status: "ok"; 
  * trimRecentFilters (touching only makes a record fresher, i.e. less likely
  * to be evicted).
  */
-export function touchSavedFilter(userId: string, id: string, now: Date = new Date()): TouchSavedFilterOutcome {
-  const db = getDb();
+export async function touchSavedFilter(userId: string, id: string, now: Date = new Date()): Promise<TouchSavedFilterOutcome> {
+  const db = await getDb();
   const existing = db.savedFilters[id];
   if (!existing || existing.userId !== userId) {
     return { status: "not_found" };
@@ -160,6 +160,6 @@ export function touchSavedFilter(userId: string, id: string, now: Date = new Dat
 
   const updated: SavedFilter = { ...existing, usedAt: now.toISOString() };
   db.savedFilters[id] = updated;
-  saveDb(db);
+  await saveDb(db);
   return { status: "ok", filter: updated };
 }

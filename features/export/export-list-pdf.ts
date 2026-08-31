@@ -18,12 +18,12 @@ export async function exportListPdf(
   listId: string,
   requestedIds: string[] | undefined,
 ): Promise<ExportListPdfResult> {
-  const visible = getVisibleList(userId, listId);
+  const visible = await getVisibleList(userId, listId);
   if (visible.status === "not_found") {
     return { status: "not_found" };
   }
 
-  const visibleTasks = listVisibleTasks(userId, listId);
+  const visibleTasks = await listVisibleTasks(userId, listId);
   const requested = requestedIds === undefined ? null : new Set(requestedIds);
   const tasks = requested === null ? visibleTasks : visibleTasks.filter((task) => requested.has(task.id));
 

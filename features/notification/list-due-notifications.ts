@@ -11,8 +11,8 @@ import { selectVisibleTasks } from "@/entities/task/model";
 import { listTasks } from "@/entities/task/repository";
 import { findUserById } from "@/entities/user/repository";
 
-function listWorkDayHoursChanges(userId: string): WorkDayHoursChangeEvent[] {
-  return listActivityForUser(userId)
+async function listWorkDayHoursChanges(userId: string): Promise<WorkDayHoursChangeEvent[]> {
+  return (await listActivityForUser(userId))
     .filter((activity) => activity.action === "work_day_hours_changed")
     .map((activity) => ({
       id: activity.id,
@@ -25,15 +25,15 @@ export type ListDueNotificationsOutcome =
   | { status: "not_found" }
   | { status: "ok"; notifications: DueNotification[] };
 
-export function listDueNotificationsForUser(userId: string, now: Date = new Date()): ListDueNotificationsOutcome {
-  const user = findUserById(userId);
+export async function listDueNotificationsForUser(userId: string, now: Date = new Date()): Promise<ListDueNotificationsOutcome> {
+  const user = await findUserById(userId);
   if (!user) {
     return { status: "not_found" };
   }
 
-  const lists = selectVisibleLists(listLists(), userId);
+  const lists = selectVisibleLists(await listLists(), userId);
   const visibleListIds = new Set(lists.map((list) => list.id));
-  const tasks = selectVisibleTasks(listTasks(), visibleListIds);
+  const tasks = selectVisibleTasks(await listTasks(), visibleListIds);
 
   return {
     status: "ok",
@@ -42,9 +42,9 @@ export function listDueNotificationsForUser(userId: string, now: Date = new Date
       tasks,
       settings: user.settings.notifications,
       now,
-      seenKeys: new Set(listAckedNotificationKeys(userId)),
+      seenKeys: new Set(await listAckedNotificationKeys(userId)),
       workDayHours: user.settings.workDayHours,
-      workDayHoursChanges: listWorkDayHoursChanges(userId),
+      workDayHoursChanges: await listWorkDayHoursChanges(userId),
     }),
   };
 }

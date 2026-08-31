@@ -6,12 +6,12 @@ import { ackNotificationsForUser } from "@/features/notification/ack-notificatio
 import { listDueNotificationsForUser } from "@/features/notification/list-due-notifications";
 
 export async function GET(request: NextRequest) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if (!auth.authorized) {
     return jsonError(401, "Unauthorized");
   }
 
-  const result = listDueNotificationsForUser(auth.user.id);
+  const result = await listDueNotificationsForUser(auth.user.id);
   if (result.status === "not_found") {
     return jsonError(401, "Unauthorized");
   }
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if (!auth.authorized) {
     return jsonError(401, "Unauthorized");
   }
@@ -35,7 +35,7 @@ export async function PATCH(request: NextRequest) {
     return jsonError(400, "Validation failed", parsed.error.issues);
   }
 
-  const result = ackNotificationsForUser(auth.user.id, parsed.data.keys);
+  const result = await ackNotificationsForUser(auth.user.id, parsed.data.keys);
   if (result.status === "not_found") {
     return jsonError(401, "Unauthorized");
   }

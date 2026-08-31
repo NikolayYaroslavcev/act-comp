@@ -9,7 +9,7 @@ import { SettingsForm } from "@/widgets/settings/settings-form";
 export default async function SettingsPage() {
   const cookieStore = await cookies();
   const sessionId = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-  const current = getCurrentSession(sessionId);
+  const current = await getCurrentSession(sessionId);
 
   if (!current) {
     return redirect("/login");

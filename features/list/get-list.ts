@@ -4,8 +4,8 @@ import type { TaskList } from "@/entities/list/schema";
 
 export type GetListOutcome = { status: "not_found" } | { status: "ok"; list: TaskList };
 
-export function getVisibleList(userId: string, listId: string): GetListOutcome {
-  const list = findListById(listId);
+export async function getVisibleList(userId: string, listId: string): Promise<GetListOutcome> {
+  const list = await findListById(listId);
   if (!list || list.deletedAt !== null || !canViewList(list, userId)) {
     return { status: "not_found" };
   }

@@ -14,13 +14,13 @@ export type RollbackTaskOutcome =
   | { status: "blocked" }
   | { status: "ok"; task: Task; cascade: CascadeUpdate[] };
 
-export function rollbackTaskForUser(userId: string, taskId: string, historyIndex: number): RollbackTaskOutcome {
-  const task = findTaskById(taskId);
+export async function rollbackTaskForUser(userId: string, taskId: string, historyIndex: number): Promise<RollbackTaskOutcome> {
+  const task = await findTaskById(taskId);
   if (!task || task.deletedAt !== null) {
     return { status: "not_found" };
   }
 
-  const list = findListById(task.listId);
+  const list = await findListById(task.listId);
   if (!list || list.deletedAt !== null || !canViewList(list, userId)) {
     return { status: "not_found" };
   }

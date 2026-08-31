@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     return jsonError(400, "Validation failed", parsed.error.issues);
   }
 
-  const result = login(parsed.data, { userAgent: request.headers.get("user-agent") });
+  const result = await login(parsed.data, { userAgent: request.headers.get("user-agent") });
   if (!result) {
     return jsonError(401, "Invalid email or password");
   }

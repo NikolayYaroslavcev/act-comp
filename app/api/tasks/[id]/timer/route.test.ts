@@ -17,12 +17,12 @@ function timerRequest(id: string, sessionId: string | undefined, body: unknown) 
   });
 }
 
-function callTimer(id: string, request: NextRequest) {
-  return POST(request, { params: Promise.resolve({ id }) });
+async function callTimer(id: string, request: NextRequest) {
+  return await POST(request, { params: Promise.resolve({ id }) });
 }
 
-function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
-  return createSession({
+async function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
+  return await createSession({
     userId,
     ip: `192.0.2.${suffix} (demo)`,
     device: "Chrome on Windows",
@@ -30,8 +30,8 @@ function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
   });
 }
 
-function makeTaskIn(listId: string) {
-  return createTask({
+async function makeTaskIn(listId: string) {
+  return await createTask({
     listId,
     title: "Task",
     description: "",
@@ -46,8 +46,8 @@ function makeTaskIn(listId: string) {
 
 describe("POST /api/tasks/[id]/timer", () => {
   it("returns 401 when no session cookie is present", async () => {
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callTimer(task.id, timerRequest(task.id, undefined, { action: "start" }));
 
@@ -55,23 +55,23 @@ describe("POST /api/tasks/[id]/timer", () => {
   });
 
   it("returns 200 and starts the timer for the owner", async () => {
-    const session = sessionFor("u1", "40");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "40");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callTimer(task.id, timerRequest(task.id, session.id, { action: "start" }));
 
     expect(response.status).toBe(200);
     const json = await response.json();
     expect(json.data.timerStartedAt).toBeTruthy();
-    expect(findTaskById(task.id)?.timerStartedAt).toBe(json.data.timerStartedAt);
+    expect((await findTaskById(task.id))?.timerStartedAt).toBe(json.data.timerStartedAt);
   });
 
   it("returns 403 for shared read access", async () => {
-    const session = sessionFor("u2", "41");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "read" });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u2", "41");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "read" });
+    const task = await makeTaskIn(list.id);
 
     const response = await callTimer(task.id, timerRequest(task.id, session.id, { action: "start" }));
 
@@ -79,10 +79,10 @@ describe("POST /api/tasks/[id]/timer", () => {
   });
 
   it("returns 200 for shared edit access", async () => {
-    const session = sessionFor("u2", "42");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "edit" });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u2", "42");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "edit" });
+    const task = await makeTaskIn(list.id);
 
     const response = await callTimer(task.id, timerRequest(task.id, session.id, { action: "start" }));
 
@@ -90,7 +90,7 @@ describe("POST /api/tasks/[id]/timer", () => {
   });
 
   it("returns 404 for an unknown task", async () => {
-    const session = sessionFor("u1", "43");
+    const session = await sessionFor("u1", "43");
 
     const response = await callTimer("missing", timerRequest("missing", session.id, { action: "start" }));
 
@@ -98,9 +98,9 @@ describe("POST /api/tasks/[id]/timer", () => {
   });
 
   it("returns 404 (not 403) for another user's task", async () => {
-    const session = sessionFor("u2", "44");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u2", "44");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callTimer(task.id, timerRequest(task.id, session.id, { action: "start" }));
 
@@ -108,10 +108,10 @@ describe("POST /api/tasks/[id]/timer", () => {
   });
 
   it("returns 409 for a completed task", async () => {
-    const session = sessionFor("u1", "45");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    insertTasks([{ ...task, status: "done" }]);
+    const session = await sessionFor("u1", "45");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    await insertTasks([{ ...task, status: "done" }]);
 
     const response = await callTimer(task.id, timerRequest(task.id, session.id, { action: "start" }));
 
@@ -119,21 +119,21 @@ describe("POST /api/tasks/[id]/timer", () => {
   });
 
   it("returns 409 for a duplicate start", async () => {
-    const session = sessionFor("u1", "46");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    applyTaskTimer(task.id, "u1", "start", new Date("2026-08-29T10:00:00.000Z"));
+    const session = await sessionFor("u1", "46");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    await applyTaskTimer(task.id, "u1", "start", new Date("2026-08-29T10:00:00.000Z"));
 
     const response = await callTimer(task.id, timerRequest(task.id, session.id, { action: "start" }));
 
     expect(response.status).toBe(409);
-    expect(findTaskById(task.id)?.timerStartedAt).toBe("2026-08-29T10:00:00.000Z");
+    expect((await findTaskById(task.id))?.timerStartedAt).toBe("2026-08-29T10:00:00.000Z");
   });
 
   it("returns 400 when server-owned fields are supplied", async () => {
-    const session = sessionFor("u1", "47");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "47");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callTimer(
       task.id,
@@ -145,20 +145,20 @@ describe("POST /api/tasks/[id]/timer", () => {
     );
 
     expect(response.status).toBe(400);
-    expect(findTaskById(task.id)?.timerStartedAt).toBeNull();
+    expect((await findTaskById(task.id))?.timerStartedAt).toBeNull();
   });
 
   it("pauses, resumes and stops through the same endpoint", async () => {
-    const session = sessionFor("u1", "48");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "48");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     expect((await callTimer(task.id, timerRequest(task.id, session.id, { action: "start" }))).status).toBe(200);
     expect((await callTimer(task.id, timerRequest(task.id, session.id, { action: "pause" }))).status).toBe(200);
     expect((await callTimer(task.id, timerRequest(task.id, session.id, { action: "resume" }))).status).toBe(200);
     expect((await callTimer(task.id, timerRequest(task.id, session.id, { action: "stop" }))).status).toBe(200);
 
-    const stored = findTaskById(task.id)!;
+    const stored = (await findTaskById(task.id))!;
     expect(stored.timerStartedAt).toBeNull();
     expect(stored.timerPausedAt).toBeNull();
   });

@@ -17,16 +17,16 @@ import { buildDuplicatedTasks } from "@/entities/task/model";
 import { insertTasks, listTasks } from "@/entities/task/repository";
 import { findUserByEmail, findUserById } from "@/entities/user/repository";
 
-export function listLists(): TaskList[] {
-  return Object.values(getDb().lists);
+export async function listLists(): Promise<TaskList[]> {
+  return Object.values((await getDb()).lists);
 }
 
-export function findListById(id: string): TaskList | undefined {
-  return getDb().lists[id];
+export async function findListById(id: string): Promise<TaskList | undefined> {
+  return (await getDb()).lists[id];
 }
 
-export function createList(ownerId: string, input: CreateListInput): TaskList {
-  const db = getDb();
+export async function createList(ownerId: string, input: CreateListInput): Promise<TaskList> {
+  const db = await getDb();
   const now = new Date().toISOString();
   const list: TaskList = {
     id: crypto.randomUUID(),
@@ -41,7 +41,7 @@ export function createList(ownerId: string, input: CreateListInput): TaskList {
     lastActivityAt: now,
   };
   db.lists[list.id] = list;
-  saveDb(db);
+  await saveDb(db);
   return list;
 }
 
@@ -51,8 +51,8 @@ export type UpdateListOutcome =
   | { status: "deleted" }
   | { status: "ok"; list: TaskList };
 
-export function updateList(id: string, userId: string, patch: UpdateListInput): UpdateListOutcome {
-  const db = getDb();
+export async function updateList(id: string, userId: string, patch: UpdateListInput): Promise<UpdateListOutcome> {
+  const db = await getDb();
   const existing = db.lists[id];
   if (!existing) {
     return { status: "not_found" };
@@ -83,7 +83,7 @@ export function updateList(id: string, userId: string, patch: UpdateListInput): 
     lastActivityAt: now,
   };
   db.lists[id] = updated;
-  saveDb(db);
+  await saveDb(db);
   return { status: "ok", list: updated };
 }
 
@@ -93,8 +93,8 @@ export type DuplicateListOutcome =
   | { status: "deleted" }
   | { status: "ok"; list: TaskList };
 
-export function duplicateList(id: string, userId: string, input: DuplicateListInput): DuplicateListOutcome {
-  const db = getDb();
+export async function duplicateList(id: string, userId: string, input: DuplicateListInput): Promise<DuplicateListOutcome> {
+  const db = await getDb();
   const existing = db.lists[id];
   if (!existing) {
     return { status: "not_found" };
@@ -113,8 +113,8 @@ export function duplicateList(id: string, userId: string, input: DuplicateListIn
 
   let taskIds: string[] = [];
   if (input.copyTasks) {
-    const duplicatedTasks = buildDuplicatedTasks(listTasks(existing.id, db), newListId, now, () => crypto.randomUUID());
-    insertTasks(duplicatedTasks, db);
+    const duplicatedTasks = buildDuplicatedTasks(await listTasks(existing.id, db), newListId, now, () => crypto.randomUUID());
+    await insertTasks(duplicatedTasks, db);
     taskIds = duplicatedTasks.map((task) => task.id);
   }
 
@@ -122,7 +122,7 @@ export function duplicateList(id: string, userId: string, input: DuplicateListIn
 
   const duplicate = buildDuplicatedList(existing, newListId, userId, taskIds, sharedWith, now);
   db.lists[duplicate.id] = duplicate;
-  saveDb(db);
+  await saveDb(db);
   return { status: "ok", list: duplicate };
 }
 
@@ -134,8 +134,8 @@ export type ShareListOutcome =
   | { status: "self_share" }
   | { status: "ok"; list: TaskList };
 
-export function shareList(id: string, ownerId: string, input: ShareListInput): ShareListOutcome {
-  const db = getDb();
+export async function shareList(id: string, ownerId: string, input: ShareListInput): Promise<ShareListOutcome> {
+  const db = await getDb();
   const existing = db.lists[id];
   if (!existing) {
     return { status: "not_found" };
@@ -153,7 +153,7 @@ export function shareList(id: string, ownerId: string, input: ShareListInput): S
     return { status: "deleted" };
   }
 
-  const targetUser = input.userId ? findUserById(input.userId) : findUserByEmail(input.email!);
+  const targetUser = input.userId ? await findUserById(input.userId) : await findUserByEmail(input.email!);
   if (!targetUser) {
     return { status: "user_not_found" };
   }
@@ -169,7 +169,7 @@ export function shareList(id: string, ownerId: string, input: ShareListInput): S
     lastActivityAt: now,
   };
   db.lists[id] = updated;
-  saveDb(db);
+  await saveDb(db);
   return { status: "ok", list: updated };
 }
 
@@ -178,8 +178,8 @@ export type DeleteListOutcome =
   | { status: "forbidden" }
   | { status: "ok"; list: TaskList };
 
-export function deleteList(id: string, userId: string): DeleteListOutcome {
-  const db = getDb();
+export async function deleteList(id: string, userId: string): Promise<DeleteListOutcome> {
+  const db = await getDb();
   const existing = db.lists[id];
   if (!existing) {
     return { status: "not_found" };
@@ -205,7 +205,7 @@ export function deleteList(id: string, userId: string): DeleteListOutcome {
     lastActivityAt: now,
   };
   db.lists[id] = updated;
-  saveDb(db);
+  await saveDb(db);
   return { status: "ok", list: updated };
 }
 
@@ -215,8 +215,8 @@ export type RestoreListOutcome =
   | { status: "expired" }
   | { status: "ok"; list: TaskList };
 
-export function restoreList(id: string, userId: string, now: Date): RestoreListOutcome {
-  const db = getDb();
+export async function restoreList(id: string, userId: string, now: Date): Promise<RestoreListOutcome> {
+  const db = await getDb();
   const existing = db.lists[id];
   if (!existing) {
     return { status: "not_found" };
@@ -246,6 +246,6 @@ export function restoreList(id: string, userId: string, now: Date): RestoreListO
     lastActivityAt: nowIso,
   };
   db.lists[id] = updated;
-  saveDb(db);
+  await saveDb(db);
   return { status: "ok", list: updated };
 }

@@ -8,13 +8,13 @@ import { PublicWelcome } from "@/widgets/welcome/public-welcome";
 export default async function Home() {
   const cookieStore = await cookies();
   const sessionId = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-  const current = getCurrentSession(sessionId);
+  const current = await getCurrentSession(sessionId);
 
   if (current) {
     return redirect("/dashboard");
   }
 
-  const stats = getSystemStats();
+  const stats = await getSystemStats();
 
   return <PublicWelcome stats={stats} />;
 }

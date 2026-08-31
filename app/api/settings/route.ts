@@ -6,12 +6,12 @@ import { getSettingsForUser } from "@/features/settings/get-settings";
 import { updateSettingsForUser } from "@/features/settings/update-settings";
 
 export async function GET(request: NextRequest) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if (!auth.authorized) {
     return jsonError(401, "Unauthorized");
   }
 
-  const result = getSettingsForUser(auth.user.id);
+  const result = await getSettingsForUser(auth.user.id);
   if (result.status === "not_found") {
     return jsonError(401, "Unauthorized");
   }
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if (!auth.authorized) {
     return jsonError(401, "Unauthorized");
   }
@@ -35,7 +35,7 @@ export async function PATCH(request: NextRequest) {
     return jsonError(400, "Validation failed", parsed.error.issues);
   }
 
-  const result = updateSettingsForUser(auth.user.id, parsed.data);
+  const result = await updateSettingsForUser(auth.user.id, parsed.data);
   if (result.status === "not_found") {
     return jsonError(401, "Unauthorized");
   }

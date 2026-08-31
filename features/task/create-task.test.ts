@@ -18,63 +18,63 @@ function baseInput(listId: string) {
 }
 
 describe("createTaskForUser", () => {
-  it("creates the task when the user owns the list", () => {
-    const list = createList("u-owner-1", { title: "Owned", template: "work", deadline: null });
+  it("creates the task when the user owns the list", async () => {
+    const list = await createList("u-owner-1", { title: "Owned", template: "work", deadline: null });
 
-    const result = createTaskForUser("u-owner-1", baseInput(list.id));
+    const result = await createTaskForUser("u-owner-1", baseInput(list.id));
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
       expect(result.task.listId).toBe(list.id);
-      expect(findTaskById(result.task.id)).toEqual(result.task);
+      expect(await findTaskById(result.task.id)).toEqual(result.task);
     }
   });
 
-  it("creates the task when the user has edit access via sharing", () => {
-    const list = createList("u-owner-2", { title: "Shared", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u-editor-2", access: "edit" });
+  it("creates the task when the user has edit access via sharing", async () => {
+    const list = await createList("u-owner-2", { title: "Shared", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u-editor-2", access: "edit" });
 
-    const result = createTaskForUser("u-editor-2", baseInput(list.id));
+    const result = await createTaskForUser("u-editor-2", baseInput(list.id));
 
     expect(result.status).toBe("ok");
   });
 
-  it("returns forbidden when the user only has read access", () => {
-    const list = createList("u-owner-3", { title: "Shared", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u-viewer-3", access: "read" });
+  it("returns forbidden when the user only has read access", async () => {
+    const list = await createList("u-owner-3", { title: "Shared", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u-viewer-3", access: "read" });
 
-    const result = createTaskForUser("u-viewer-3", baseInput(list.id));
-
-    expect(result.status).toBe("forbidden");
-  });
-
-  it("returns forbidden when the user has no access to the list", () => {
-    const list = createList("u-owner-4", { title: "Private", template: "work", deadline: null });
-
-    const result = createTaskForUser("u-stranger-4", baseInput(list.id));
+    const result = await createTaskForUser("u-viewer-3", baseInput(list.id));
 
     expect(result.status).toBe("forbidden");
   });
 
-  it("returns list_not_found for an unknown listId", () => {
-    const result = createTaskForUser("u-anyone-5", baseInput("does-not-exist"));
+  it("returns forbidden when the user has no access to the list", async () => {
+    const list = await createList("u-owner-4", { title: "Private", template: "work", deadline: null });
+
+    const result = await createTaskForUser("u-stranger-4", baseInput(list.id));
+
+    expect(result.status).toBe("forbidden");
+  });
+
+  it("returns list_not_found for an unknown listId", async () => {
+    const result = await createTaskForUser("u-anyone-5", baseInput("does-not-exist"));
 
     expect(result.status).toBe("list_not_found");
   });
 
-  it("returns list_not_found for a soft-deleted list, even for its owner", () => {
-    const list = createList("u-owner-6", { title: "Owned", template: "work", deadline: null });
-    findListById(list.id)!.deletedAt = "2026-08-01T00:00:00.000Z";
+  it("returns list_not_found for a soft-deleted list, even for its owner", async () => {
+    const list = await createList("u-owner-6", { title: "Owned", template: "work", deadline: null });
+    (await findListById(list.id))!.deletedAt = "2026-08-01T00:00:00.000Z";
 
-    const result = createTaskForUser("u-owner-6", baseInput(list.id));
+    const result = await createTaskForUser("u-owner-6", baseInput(list.id));
 
     expect(result.status).toBe("list_not_found");
   });
 
-  it("ignores an ownerId-like field spoofed in the input and derives access from the session user only", () => {
-    const list = createList("u-owner-7", { title: "Owned", template: "work", deadline: null });
+  it("ignores an ownerId-like field spoofed in the input and derives access from the session user only", async () => {
+    const list = await createList("u-owner-7", { title: "Owned", template: "work", deadline: null });
 
-    const result = createTaskForUser("u-stranger-7", {
+    const result = await createTaskForUser("u-stranger-7", {
       ...baseInput(list.id),
       // @ts-expect-error -- simulating a client attempting to smuggle extra fields
       ownerId: "u-owner-7",
@@ -83,40 +83,40 @@ describe("createTaskForUser", () => {
     expect(result.status).toBe("forbidden");
   });
 
-  it("rejects a parentId that references a task in a different list", () => {
-    const listA = createList("u-owner-8", { title: "A", template: "work", deadline: null });
-    const listB = createList("u-owner-8b", { title: "B", template: "work", deadline: null });
-    const foreignParent = createTask({ ...baseInput(listB.id), title: "Foreign parent" });
+  it("rejects a parentId that references a task in a different list", async () => {
+    const listA = await createList("u-owner-8", { title: "A", template: "work", deadline: null });
+    const listB = await createList("u-owner-8b", { title: "B", template: "work", deadline: null });
+    const foreignParent = await createTask({ ...baseInput(listB.id), title: "Foreign parent" });
 
-    const result = createTaskForUser("u-owner-8", { ...baseInput(listA.id), parentId: foreignParent.id });
-
-    expect(result.status).toBe("invalid_parent");
-    expect(findTaskById(foreignParent.id)!.subtaskIds).toEqual([]);
-  });
-
-  it("rejects an unknown parentId", () => {
-    const list = createList("u-owner-9", { title: "Owned", template: "work", deadline: null });
-
-    const result = createTaskForUser("u-owner-9", { ...baseInput(list.id), parentId: "does-not-exist" });
+    const result = await createTaskForUser("u-owner-8", { ...baseInput(listA.id), parentId: foreignParent.id });
 
     expect(result.status).toBe("invalid_parent");
+    expect((await findTaskById(foreignParent.id))!.subtaskIds).toEqual([]);
   });
 
-  it("rejects a parentId that references a soft-deleted task", () => {
-    const list = createList("u-owner-10", { title: "Owned", template: "work", deadline: null });
-    const parent = createTask({ ...baseInput(list.id), title: "Deleted parent" });
-    findTaskById(parent.id)!.deletedAt = "2026-08-01T00:00:00.000Z";
+  it("rejects an unknown parentId", async () => {
+    const list = await createList("u-owner-9", { title: "Owned", template: "work", deadline: null });
 
-    const result = createTaskForUser("u-owner-10", { ...baseInput(list.id), parentId: parent.id });
+    const result = await createTaskForUser("u-owner-9", { ...baseInput(list.id), parentId: "does-not-exist" });
 
     expect(result.status).toBe("invalid_parent");
   });
 
-  it("accepts a parentId that references an existing task in the same list", () => {
-    const list = createList("u-owner-11", { title: "Owned", template: "work", deadline: null });
-    const parent = createTask({ ...baseInput(list.id), title: "Parent" });
+  it("rejects a parentId that references a soft-deleted task", async () => {
+    const list = await createList("u-owner-10", { title: "Owned", template: "work", deadline: null });
+    const parent = await createTask({ ...baseInput(list.id), title: "Deleted parent" });
+    (await findTaskById(parent.id))!.deletedAt = "2026-08-01T00:00:00.000Z";
 
-    const result = createTaskForUser("u-owner-11", { ...baseInput(list.id), parentId: parent.id, title: "Child" });
+    const result = await createTaskForUser("u-owner-10", { ...baseInput(list.id), parentId: parent.id });
+
+    expect(result.status).toBe("invalid_parent");
+  });
+
+  it("accepts a parentId that references an existing task in the same list", async () => {
+    const list = await createList("u-owner-11", { title: "Owned", template: "work", deadline: null });
+    const parent = await createTask({ ...baseInput(list.id), title: "Parent" });
+
+    const result = await createTaskForUser("u-owner-11", { ...baseInput(list.id), parentId: parent.id, title: "Child" });
 
     expect(result.status).toBe("ok");
     if (result.status === "ok") {
@@ -125,12 +125,12 @@ describe("createTaskForUser", () => {
     }
   });
 
-  it("accepts a same-list parentId when the caller has shared edit access", () => {
-    const list = createList("u-owner-12", { title: "Shared", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u-editor-12", access: "edit" });
-    const parent = createTask({ ...baseInput(list.id), title: "Parent" });
+  it("accepts a same-list parentId when the caller has shared edit access", async () => {
+    const list = await createList("u-owner-12", { title: "Shared", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u-editor-12", access: "edit" });
+    const parent = await createTask({ ...baseInput(list.id), title: "Parent" });
 
-    const result = createTaskForUser("u-editor-12", { ...baseInput(list.id), parentId: parent.id });
+    const result = await createTaskForUser("u-editor-12", { ...baseInput(list.id), parentId: parent.id });
 
     expect(result.status).toBe("ok");
   });

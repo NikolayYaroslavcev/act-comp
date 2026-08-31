@@ -14,13 +14,13 @@ export type CloneTaskOutcome =
 // view access duplicateList allows for whole-list duplication into a list
 // the caller will own — clone must never grant more than the caller already
 // has on the source list.
-export function cloneTaskForUser(userId: string, taskId: string): CloneTaskOutcome {
-  const task = findTaskById(taskId);
+export async function cloneTaskForUser(userId: string, taskId: string): Promise<CloneTaskOutcome> {
+  const task = await findTaskById(taskId);
   if (!task) {
     return { status: "not_found" };
   }
 
-  const list = findListById(task.listId);
+  const list = await findListById(task.listId);
   if (!list || list.deletedAt !== null || !canViewList(list, userId)) {
     return { status: "not_found" };
   }

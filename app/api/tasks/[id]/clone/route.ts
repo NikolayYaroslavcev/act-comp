@@ -6,13 +6,13 @@ import { cloneTaskForUser } from "@/features/task/clone-task";
 type RouteContext = { params: Promise<{ id: string }> };
 
 export async function POST(request: NextRequest, { params }: RouteContext) {
-  const auth = requireAuth(request);
+  const auth = await requireAuth(request);
   if (!auth.authorized) {
     return jsonError(401, "Unauthorized");
   }
 
   const { id } = await params;
-  const result = cloneTaskForUser(auth.user.id, id);
+  const result = await cloneTaskForUser(auth.user.id, id);
   switch (result.status) {
     case "not_found":
     case "deleted":

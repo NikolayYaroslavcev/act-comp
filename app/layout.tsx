@@ -27,7 +27,7 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const cookieStore = await cookies();
   const sessionId = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-  const current = getCurrentSession(sessionId);
+  const current = await getCurrentSession(sessionId);
   const theme = current?.user.settings.theme ?? "system";
   const darkClass = theme === "dark" ? "dark" : "";
 

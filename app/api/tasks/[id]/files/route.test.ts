@@ -81,16 +81,16 @@ function malformedUploadRequest(taskId: string, sessionId: string) {
   });
 }
 
-function callGet(taskId: string, request: NextRequest) {
-  return GET(request, { params: Promise.resolve({ id: taskId }) });
+async function callGet(taskId: string, request: NextRequest) {
+  return await GET(request, { params: Promise.resolve({ id: taskId }) });
 }
 
-function callPost(taskId: string, request: NextRequest) {
-  return POST(request, { params: Promise.resolve({ id: taskId }) });
+async function callPost(taskId: string, request: NextRequest) {
+  return await POST(request, { params: Promise.resolve({ id: taskId }) });
 }
 
-function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
-  return createSession({
+async function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
+  return await createSession({
     userId,
     ip: `192.0.2.${suffix} (demo)`,
     device: "Chrome on Windows",
@@ -98,8 +98,8 @@ function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
   });
 }
 
-function makeTaskIn(listId: string) {
-  return createTask({
+async function makeTaskIn(listId: string) {
+  return await createTask({
     listId,
     title: "Task",
     description: "",
@@ -114,8 +114,8 @@ function makeTaskIn(listId: string) {
 
 describe("GET /api/tasks/[id]/files", () => {
   it("returns 401 when no session cookie is present", async () => {
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callGet(task.id, filesRequest(task.id, undefined));
 
@@ -123,10 +123,10 @@ describe("GET /api/tasks/[id]/files", () => {
   });
 
   it("returns 200 with the task's attachments for its owner", async () => {
-    const session = sessionFor("u1", "400");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    const attachment = createAttachment({
+    const session = await sessionFor("u1", "400");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    const attachment = await createAttachment({
       taskId: task.id,
       uploadedBy: "u1",
       filename: "a.txt",
@@ -144,7 +144,7 @@ describe("GET /api/tasks/[id]/files", () => {
   });
 
   it("returns 404 for an unknown task id", async () => {
-    const session = sessionFor("u1", "401");
+    const session = await sessionFor("u1", "401");
 
     const response = await callGet("does-not-exist", filesRequest("does-not-exist", session.id));
 
@@ -152,9 +152,9 @@ describe("GET /api/tasks/[id]/files", () => {
   });
 
   it("returns 404 for a task inaccessible to the user (not a leaking 403)", async () => {
-    const session = sessionFor("u2", "402");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u2", "402");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callGet(task.id, filesRequest(task.id, session.id));
 
@@ -162,10 +162,10 @@ describe("GET /api/tasks/[id]/files", () => {
   });
 
   it("returns 404 for a soft-deleted task", async () => {
-    const session = sessionFor("u1", "403");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    insertTasks([{ ...task, deletedAt: "2026-08-01T00:00:00.000Z" }]);
+    const session = await sessionFor("u1", "403");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    await insertTasks([{ ...task, deletedAt: "2026-08-01T00:00:00.000Z" }]);
 
     const response = await callGet(task.id, filesRequest(task.id, session.id));
 
@@ -175,8 +175,8 @@ describe("GET /api/tasks/[id]/files", () => {
 
 describe("POST /api/tasks/[id]/files", () => {
   it("returns 401 when no session cookie is present", async () => {
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPost(task.id, uploadRequest(task.id, undefined, fileMultipart("a.txt", "hello")));
 
@@ -184,9 +184,9 @@ describe("POST /api/tasks/[id]/files", () => {
   });
 
   it("uploads a file for the task's owner and returns 201", async () => {
-    const session = sessionFor("u1", "410");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "410");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPost(
       task.id,
@@ -198,13 +198,13 @@ describe("POST /api/tasks/[id]/files", () => {
     expect(json.data.filename).toBe("report.pdf");
     expect(json.data.mimeType).toBe("application/pdf");
     expect(json.data.uploadedBy).toBe("u1");
-    expect(listAttachmentsForTask(task.id)).toHaveLength(1);
+    expect(await listAttachmentsForTask(task.id)).toHaveLength(1);
   });
 
   it("preserves a Unicode filename with spaces", async () => {
-    const session = sessionFor("u1", "411");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "411");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPost(
       task.id,
@@ -217,9 +217,9 @@ describe("POST /api/tasks/[id]/files", () => {
   });
 
   it("does not treat a path-traversal-shaped filename as a filesystem path (stores it as plain metadata)", async () => {
-    const session = sessionFor("u1", "412");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "412");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPost(
       task.id,
@@ -232,21 +232,21 @@ describe("POST /api/tasks/[id]/files", () => {
   });
 
   it("allows duplicate filenames on the same task", async () => {
-    const session = sessionFor("u1", "413");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "413");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     await callPost(task.id, uploadRequest(task.id, session.id, fileMultipart("same.txt", "one")));
     const response = await callPost(task.id, uploadRequest(task.id, session.id, fileMultipart("same.txt", "two")));
 
     expect(response.status).toBe(201);
-    expect(listAttachmentsForTask(task.id)).toHaveLength(2);
+    expect(await listAttachmentsForTask(task.id)).toHaveLength(2);
   });
 
   it("accepts a file with no MIME allowlist restriction", async () => {
-    const session = sessionFor("u1", "414");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "414");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPost(
       task.id,
@@ -257,20 +257,20 @@ describe("POST /api/tasks/[id]/files", () => {
   });
 
   it("returns 400 for an empty file, without creating a record", async () => {
-    const session = sessionFor("u1", "415");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "415");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPost(task.id, uploadRequest(task.id, session.id, fileMultipart("empty.txt", "")));
 
     expect(response.status).toBe(400);
-    expect(listAttachmentsForTask(task.id)).toEqual([]);
+    expect(await listAttachmentsForTask(task.id)).toEqual([]);
   });
 
   it("returns 413 for a file over the size limit, without creating a record", async () => {
-    const session = sessionFor("u1", "416");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "416");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPost(
       task.id,
@@ -278,13 +278,13 @@ describe("POST /api/tasks/[id]/files", () => {
     );
 
     expect(response.status).toBe(413);
-    expect(listAttachmentsForTask(task.id)).toEqual([]);
+    expect(await listAttachmentsForTask(task.id)).toEqual([]);
   });
 
   it("returns 400 for a request with no file field", async () => {
-    const session = sessionFor("u1", "417");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "417");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPost(task.id, uploadRequest(task.id, session.id, multipartBody([])));
 
@@ -292,9 +292,9 @@ describe("POST /api/tasks/[id]/files", () => {
   });
 
   it("returns 400 for malformed multipart data", async () => {
-    const session = sessionFor("u1", "418");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u1", "418");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPost(task.id, malformedUploadRequest(task.id, session.id));
 
@@ -302,21 +302,21 @@ describe("POST /api/tasks/[id]/files", () => {
   });
 
   it("returns 403 for a read-only shared user, without creating a record (IDOR-adjacent: edit-only action gated by view-only access)", async () => {
-    const session = sessionFor("u2", "419");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "read" });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u2", "419");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "read" });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPost(task.id, uploadRequest(task.id, session.id, fileMultipart("a.txt", "hi")));
 
     expect(response.status).toBe(403);
-    expect(listAttachmentsForTask(task.id)).toEqual([]);
+    expect(await listAttachmentsForTask(task.id)).toEqual([]);
   });
 
   it("returns 404 for a task inaccessible to the user (not a leaking 403)", async () => {
-    const session = sessionFor("u2", "420");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u2", "420");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
     const response = await callPost(task.id, uploadRequest(task.id, session.id, fileMultipart("a.txt", "hi")));
 
@@ -324,7 +324,7 @@ describe("POST /api/tasks/[id]/files", () => {
   });
 
   it("returns 404 for an unknown task id", async () => {
-    const session = sessionFor("u1", "421");
+    const session = await sessionFor("u1", "421");
 
     const response = await callPost(
       "does-not-exist",
@@ -335,10 +335,10 @@ describe("POST /api/tasks/[id]/files", () => {
   });
 
   it("returns 404 for a soft-deleted task", async () => {
-    const session = sessionFor("u1", "422");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    insertTasks([{ ...task, deletedAt: "2026-08-01T00:00:00.000Z" }]);
+    const session = await sessionFor("u1", "422");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    await insertTasks([{ ...task, deletedAt: "2026-08-01T00:00:00.000Z" }]);
 
     const response = await callPost(task.id, uploadRequest(task.id, session.id, fileMultipart("a.txt", "hi")));
 
@@ -346,10 +346,10 @@ describe("POST /api/tasks/[id]/files", () => {
   });
 
   it("ignores client-supplied server-owned fields and always attributes the upload to the authenticated user", async () => {
-    const session = sessionFor("u2", "423");
-    const list = createList("u1", { title: "List", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "edit" });
-    const task = makeTaskIn(list.id);
+    const session = await sessionFor("u2", "423");
+    const list = await createList("u1", { title: "List", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "edit" });
+    const task = await makeTaskIn(list.id);
 
     const body = multipartBody([
       { name: "file", filename: "a.txt", mimeType: "text/plain", content: "hi" },

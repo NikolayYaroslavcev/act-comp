@@ -6,6 +6,6 @@ export function saveFilterForUser(
   scope: SavedFilterScope,
   criteria: FilterCriteriaByScope,
   label: string | null,
-): SavedFilter {
+): Promise<SavedFilter> {
   return upsertAppliedFilter({ userId, scope, criteria, saved: true, label });
 }

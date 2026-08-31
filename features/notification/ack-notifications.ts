@@ -7,16 +7,16 @@ export type AckNotificationsOutcome =
   | { status: "invalid_keys" }
   | { status: "ok"; keys: string[] };
 
-export function ackNotificationsForUser(
+export async function ackNotificationsForUser(
   userId: string,
   keys: string[],
   now: Date = new Date(),
-): AckNotificationsOutcome {
-  if (!findUserById(userId)) {
+): Promise<AckNotificationsOutcome> {
+  if (!(await findUserById(userId))) {
     return { status: "not_found" };
   }
 
-  const due = listDueNotificationsForUser(userId, now);
+  const due = await listDueNotificationsForUser(userId, now);
   if (due.status === "not_found") {
     return { status: "not_found" };
   }
@@ -26,5 +26,5 @@ export function ackNotificationsForUser(
     return { status: "invalid_keys" };
   }
 
-  return { status: "ok", keys: ackNotificationKeys(userId, keys) };
+  return { status: "ok", keys: await ackNotificationKeys(userId, keys) };
 }

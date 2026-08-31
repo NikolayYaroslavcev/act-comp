@@ -30,8 +30,8 @@ function patchRequestWithRawBody(id: string, sessionId: string, rawBody: string)
   });
 }
 
-function callPatch(id: string, request: NextRequest) {
-  return PATCH(request, { params: Promise.resolve({ id }) });
+async function callPatch(id: string, request: NextRequest) {
+  return await PATCH(request, { params: Promise.resolve({ id }) });
 }
 
 function deleteRequest(id: string, sessionId: string | undefined) {
@@ -43,15 +43,15 @@ function deleteRequest(id: string, sessionId: string | undefined) {
   });
 }
 
-function callDelete(id: string, request: NextRequest) {
-  return DELETE(request, { params: Promise.resolve({ id }) });
+async function callDelete(id: string, request: NextRequest) {
+  return await DELETE(request, { params: Promise.resolve({ id }) });
 }
 
 // The seed data only defines users u1/u2/u3 (see data.json) — requireAuth
 // resolves a session to a real user, so tests must reuse those ids rather
 // than inventing arbitrary owner ids.
-function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
-  return createSession({
+async function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
+  return await createSession({
     userId,
     ip: `192.0.2.${suffix} (demo)`,
     device: "Chrome on Windows",
@@ -65,13 +65,13 @@ function getRequest(id: string, sessionId: string | undefined) {
   });
 }
 
-function callGet(id: string, request: NextRequest) {
-  return GET(request, { params: Promise.resolve({ id }) });
+async function callGet(id: string, request: NextRequest) {
+  return await GET(request, { params: Promise.resolve({ id }) });
 }
 
 describe("GET /api/lists/[id]", () => {
   it("returns 401 when no session cookie is present", async () => {
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
 
     const response = await callGet(list.id, getRequest(list.id, undefined));
 
@@ -79,9 +79,9 @@ describe("GET /api/lists/[id]", () => {
   });
 
   it("returns 401 for a revoked session", async () => {
-    const session = sessionFor("u1", "70");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    revokeSession(session.id);
+    const session = await sessionFor("u1", "70");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    await revokeSession(session.id);
 
     const response = await callGet(list.id, getRequest(list.id, session.id));
 
@@ -89,8 +89,8 @@ describe("GET /api/lists/[id]", () => {
   });
 
   it("returns 200 for the owner", async () => {
-    const session = sessionFor("u1", "71");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
+    const session = await sessionFor("u1", "71");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
 
     const response = await callGet(list.id, getRequest(list.id, session.id));
 
@@ -100,9 +100,9 @@ describe("GET /api/lists/[id]", () => {
   });
 
   it("returns 200 for a read-access shared user", async () => {
-    const viewer = sessionFor("u2", "72");
-    const list = createList("u1", { title: "Shared read", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "read" });
+    const viewer = await sessionFor("u2", "72");
+    const list = await createList("u1", { title: "Shared read", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "read" });
 
     const response = await callGet(list.id, getRequest(list.id, viewer.id));
 
@@ -110,9 +110,9 @@ describe("GET /api/lists/[id]", () => {
   });
 
   it("returns 200 for an edit-access shared user", async () => {
-    const editor = sessionFor("u2", "73");
-    const list = createList("u1", { title: "Shared edit", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "edit" });
+    const editor = await sessionFor("u2", "73");
+    const list = await createList("u1", { title: "Shared edit", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "edit" });
 
     const response = await callGet(list.id, getRequest(list.id, editor.id));
 
@@ -120,7 +120,7 @@ describe("GET /api/lists/[id]", () => {
   });
 
   it("returns 404 for an unknown list id", async () => {
-    const session = sessionFor("u1", "74");
+    const session = await sessionFor("u1", "74");
 
     const response = await callGet("does-not-exist", getRequest("does-not-exist", session.id));
 
@@ -128,8 +128,8 @@ describe("GET /api/lists/[id]", () => {
   });
 
   it("returns 404 instead of 403 for a private list owned by another user", async () => {
-    const stranger = sessionFor("u2", "75");
-    const list = createList("u1", { title: "Private", template: "work", deadline: null });
+    const stranger = await sessionFor("u2", "75");
+    const list = await createList("u1", { title: "Private", template: "work", deadline: null });
 
     const response = await callGet(list.id, getRequest(list.id, stranger.id));
 
@@ -137,9 +137,9 @@ describe("GET /api/lists/[id]", () => {
   });
 
   it("returns 404 for a soft-deleted list, even for its owner", async () => {
-    const session = sessionFor("u1", "76");
-    const list = createList("u1", { title: "Deleted", template: "work", deadline: null });
-    findListById(list.id)!.deletedAt = "2026-08-01T00:00:00.000Z";
+    const session = await sessionFor("u1", "76");
+    const list = await createList("u1", { title: "Deleted", template: "work", deadline: null });
+    (await findListById(list.id))!.deletedAt = "2026-08-01T00:00:00.000Z";
 
     const response = await callGet(list.id, getRequest(list.id, session.id));
 
@@ -149,7 +149,7 @@ describe("GET /api/lists/[id]", () => {
 
 describe("PATCH /api/lists/[id]", () => {
   it("returns 401 when no session cookie is present", async () => {
-    const list = createList("u1", { title: "Old", template: "work", deadline: null });
+    const list = await createList("u1", { title: "Old", template: "work", deadline: null });
 
     const response = await callPatch(list.id, patchRequest(list.id, undefined, { title: "New" }));
 
@@ -157,8 +157,8 @@ describe("PATCH /api/lists/[id]", () => {
   });
 
   it("returns 400 for invalid JSON", async () => {
-    const session = sessionFor("u1", "30");
-    const list = createList("u1", { title: "Old", template: "work", deadline: null });
+    const session = await sessionFor("u1", "30");
+    const list = await createList("u1", { title: "Old", template: "work", deadline: null });
 
     const response = await callPatch(list.id, patchRequestWithRawBody(list.id, session.id, "{ not json"));
 
@@ -166,8 +166,8 @@ describe("PATCH /api/lists/[id]", () => {
   });
 
   it("returns 400 for an invalid field value", async () => {
-    const session = sessionFor("u1", "31");
-    const list = createList("u1", { title: "Old", template: "work", deadline: null });
+    const session = await sessionFor("u1", "31");
+    const list = await createList("u1", { title: "Old", template: "work", deadline: null });
 
     const response = await callPatch(list.id, patchRequest(list.id, session.id, { template: "hobby" }));
 
@@ -177,8 +177,8 @@ describe("PATCH /api/lists/[id]", () => {
   });
 
   it("returns 400 for an empty patch", async () => {
-    const session = sessionFor("u1", "32");
-    const list = createList("u1", { title: "Old", template: "work", deadline: null });
+    const session = await sessionFor("u1", "32");
+    const list = await createList("u1", { title: "Old", template: "work", deadline: null });
 
     const response = await callPatch(list.id, patchRequest(list.id, session.id, {}));
 
@@ -186,7 +186,7 @@ describe("PATCH /api/lists/[id]", () => {
   });
 
   it("returns 404 for an unknown list id", async () => {
-    const session = sessionFor("u1", "33");
+    const session = await sessionFor("u1", "33");
 
     const response = await callPatch("does-not-exist", patchRequest("does-not-exist", session.id, { title: "New" }));
 
@@ -194,18 +194,18 @@ describe("PATCH /api/lists/[id]", () => {
   });
 
   it("returns 404 instead of 403 for a private list the caller cannot view", async () => {
-    const stranger = sessionFor("u2", "35");
-    const list = createList("u1", { title: "Old", template: "work", deadline: null });
+    const stranger = await sessionFor("u2", "35");
+    const list = await createList("u1", { title: "Old", template: "work", deadline: null });
 
     const response = await callPatch(list.id, patchRequest(list.id, stranger.id, { title: "Hijacked" }));
 
     expect(response.status).toBe(404);
-    expect(findListById(list.id)?.title).toBe("Old");
+    expect((await findListById(list.id))?.title).toBe("Old");
   });
 
   it("returns 200 and applies the update for the owner", async () => {
-    const session = sessionFor("u1", "36");
-    const list = createList("u1", { title: "Old", template: "work", deadline: null });
+    const session = await sessionFor("u1", "36");
+    const list = await createList("u1", { title: "Old", template: "work", deadline: null });
 
     const response = await callPatch(list.id, patchRequest(list.id, session.id, { title: "New title" }));
 
@@ -215,9 +215,9 @@ describe("PATCH /api/lists/[id]", () => {
   });
 
   it("supports a partial update without resetting other fields", async () => {
-    const session = sessionFor("u1", "37");
+    const session = await sessionFor("u1", "37");
     const deadline = "2026-10-01T00:00:00.000Z";
-    const list = createList("u1", { title: "Old", template: "project", deadline });
+    const list = await createList("u1", { title: "Old", template: "project", deadline });
 
     const response = await callPatch(list.id, patchRequest(list.id, session.id, { title: "New title" }));
 
@@ -229,8 +229,8 @@ describe("PATCH /api/lists/[id]", () => {
   });
 
   it("supports explicitly clearing the deadline to null", async () => {
-    const session = sessionFor("u1", "38");
-    const list = createList("u1", {
+    const session = await sessionFor("u1", "38");
+    const list = await createList("u1", {
       title: "Old",
       template: "work",
       deadline: "2026-10-01T00:00:00.000Z",
@@ -244,8 +244,8 @@ describe("PATCH /api/lists/[id]", () => {
   });
 
   it("records a history entry describing the change", async () => {
-    const session = sessionFor("u1", "39");
-    const list = createList("u1", { title: "Old", template: "work", deadline: null });
+    const session = await sessionFor("u1", "39");
+    const list = await createList("u1", { title: "Old", template: "work", deadline: null });
 
     const response = await callPatch(list.id, patchRequest(list.id, session.id, { title: "New title" }));
 
@@ -255,8 +255,8 @@ describe("PATCH /api/lists/[id]", () => {
   });
 
   it("does not add a history entry for a no-op update", async () => {
-    const session = sessionFor("u1", "40");
-    const list = createList("u1", { title: "Same", template: "work", deadline: null });
+    const session = await sessionFor("u1", "40");
+    const list = await createList("u1", { title: "Same", template: "work", deadline: null });
 
     const response = await callPatch(list.id, patchRequest(list.id, session.id, { title: "Same" }));
 
@@ -266,9 +266,9 @@ describe("PATCH /api/lists/[id]", () => {
   });
 
   it("allows an edit-access shared user to update the list", async () => {
-    const editor = sessionFor("u2", "41");
-    const list = createList("u1", { title: "Old", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "edit" });
+    const editor = await sessionFor("u2", "41");
+    const list = await createList("u1", { title: "Old", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "edit" });
 
     const response = await callPatch(list.id, patchRequest(list.id, editor.id, { title: "Edited by collaborator" }));
 
@@ -276,9 +276,9 @@ describe("PATCH /api/lists/[id]", () => {
   });
 
   it("denies a read-only shared user from updating the list", async () => {
-    const viewer = sessionFor("u2", "42");
-    const list = createList("u1", { title: "Old", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "read" });
+    const viewer = await sessionFor("u2", "42");
+    const list = await createList("u1", { title: "Old", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "read" });
 
     const response = await callPatch(list.id, patchRequest(list.id, viewer.id, { title: "Hijacked" }));
 
@@ -288,7 +288,7 @@ describe("PATCH /api/lists/[id]", () => {
 
 describe("DELETE /api/lists/[id]", () => {
   it("returns 401 when no session cookie is present", async () => {
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
 
     const response = await callDelete(list.id, deleteRequest(list.id, undefined));
 
@@ -296,7 +296,7 @@ describe("DELETE /api/lists/[id]", () => {
   });
 
   it("returns 404 for an unknown list id", async () => {
-    const session = sessionFor("u1", "50");
+    const session = await sessionFor("u1", "50");
 
     const response = await callDelete("does-not-exist", deleteRequest("does-not-exist", session.id));
 
@@ -304,19 +304,19 @@ describe("DELETE /api/lists/[id]", () => {
   });
 
   it("returns 404 instead of 403 for a private list the caller cannot view", async () => {
-    const stranger = sessionFor("u2", "51");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
+    const stranger = await sessionFor("u2", "51");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
 
     const response = await callDelete(list.id, deleteRequest(list.id, stranger.id));
 
     expect(response.status).toBe(404);
-    expect(findListById(list.id)?.deletedAt).toBeNull();
+    expect((await findListById(list.id))?.deletedAt).toBeNull();
   });
 
   it("returns 403 for an edit-access shared user", async () => {
-    const editor = sessionFor("u2", "52");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "edit" });
+    const editor = await sessionFor("u2", "52");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "edit" });
 
     const response = await callDelete(list.id, deleteRequest(list.id, editor.id));
 
@@ -324,9 +324,9 @@ describe("DELETE /api/lists/[id]", () => {
   });
 
   it("returns 403 for a read-only shared user", async () => {
-    const viewer = sessionFor("u2", "52b");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "read" });
+    const viewer = await sessionFor("u2", "52b");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "read" });
 
     const response = await callDelete(list.id, deleteRequest(list.id, viewer.id));
 
@@ -334,8 +334,8 @@ describe("DELETE /api/lists/[id]", () => {
   });
 
   it("returns 200 and sets deletedAt for the owner", async () => {
-    const session = sessionFor("u1", "53");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
+    const session = await sessionFor("u1", "53");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
 
     const response = await callDelete(list.id, deleteRequest(list.id, session.id));
 
@@ -345,17 +345,17 @@ describe("DELETE /api/lists/[id]", () => {
   });
 
   it("keeps the physical record in storage after deletion", async () => {
-    const session = sessionFor("u1", "54");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
+    const session = await sessionFor("u1", "54");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
 
     await callDelete(list.id, deleteRequest(list.id, session.id));
 
-    expect(findListById(list.id)).toBeDefined();
+    expect(await findListById(list.id)).toBeDefined();
   });
 
   it("records a history entry describing the deletion", async () => {
-    const session = sessionFor("u1", "55");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
+    const session = await sessionFor("u1", "55");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
 
     const response = await callDelete(list.id, deleteRequest(list.id, session.id));
 
@@ -365,8 +365,8 @@ describe("DELETE /api/lists/[id]", () => {
   });
 
   it("is idempotent when deleting an already-deleted list", async () => {
-    const session = sessionFor("u1", "56");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
+    const session = await sessionFor("u1", "56");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
 
     const first = await callDelete(list.id, deleteRequest(list.id, session.id));
     const firstJson = await first.json();
@@ -379,21 +379,21 @@ describe("DELETE /api/lists/[id]", () => {
   });
 
   it("removes the deleted list from the owner's visible lists", async () => {
-    const session = sessionFor("u1", "57");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
+    const session = await sessionFor("u1", "57");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
 
     await callDelete(list.id, deleteRequest(list.id, session.id));
 
-    const visible = selectVisibleLists([findListById(list.id)!], "u1");
+    const visible = selectVisibleLists([(await findListById(list.id))!], "u1");
     expect(visible).toEqual([]);
   });
 
   it("removes the deleted list from Smart Archive candidates even when its last activity is stale", async () => {
-    const session = sessionFor("u1", "58");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
+    const session = await sessionFor("u1", "58");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
     const now = new Date("2026-09-18T14:00:00.000Z");
     const staleActivityAt = "2026-08-01T00:00:00.000Z";
-    getDb().activityLog[`a-route-delete-${list.id}`] = {
+    (await getDb()).activityLog[`a-route-delete-${list.id}`] = {
       id: `a-route-delete-${list.id}`,
       entityType: "list",
       entityId: list.id,
@@ -402,12 +402,12 @@ describe("DELETE /api/lists/[id]", () => {
       byUserId: "u1",
     };
 
-    const beforeDelete = getArchiveCandidates("u1", now);
+    const beforeDelete = await getArchiveCandidates("u1", now);
     expect(beforeDelete.some((candidate) => candidate.id === list.id)).toBe(true);
 
     await callDelete(list.id, deleteRequest(list.id, session.id));
 
-    const afterDelete = getArchiveCandidates("u1", now);
+    const afterDelete = await getArchiveCandidates("u1", now);
     expect(afterDelete.some((candidate) => candidate.id === list.id)).toBe(false);
   });
 });

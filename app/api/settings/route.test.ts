@@ -16,8 +16,8 @@ function settingsRequest(method: "GET" | "PATCH", sessionId?: string, body?: unk
   });
 }
 
-function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
-  return createSession({
+async function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
+  return await createSession({
     userId,
     ip: `192.0.2.${suffix} (demo)`,
     device: "Chrome on Windows",
@@ -32,22 +32,22 @@ describe("GET /api/settings", () => {
   });
 
   it("returns 401 for a revoked session", async () => {
-    const session = sessionFor("u1", "10");
-    revokeSession(session.id);
+    const session = await sessionFor("u1", "10");
+    await revokeSession(session.id);
 
     const response = await GET(settingsRequest("GET", session.id));
     expect(response.status).toBe(401);
   });
 
   it("returns the current user's settings only", async () => {
-    const session = sessionFor("u2", "11");
+    const session = await sessionFor("u2", "11");
 
     const response = await GET(settingsRequest("GET", session.id));
     const json = await response.json();
 
     expect(response.status).toBe(200);
-    expect(json.data).toEqual(findUserById("u2")!.settings);
-    expect(json.data).not.toEqual(findUserById("u1")!.settings);
+    expect(json.data).toEqual((await findUserById("u2"))!.settings);
+    expect(json.data).not.toEqual((await findUserById("u1"))!.settings);
   });
 });
 
@@ -58,7 +58,7 @@ describe("PATCH /api/settings", () => {
   });
 
   it("returns 400 for invalid JSON", async () => {
-    const session = sessionFor("u1", "20");
+    const session = await sessionFor("u1", "20");
     const response = await PATCH(
       new NextRequest("http://localhost/api/settings", {
         method: "PATCH",
@@ -73,7 +73,7 @@ describe("PATCH /api/settings", () => {
   });
 
   it("returns 400 for an invalid field value", async () => {
-    const session = sessionFor("u1", "21");
+    const session = await sessionFor("u1", "21");
     const response = await PATCH(settingsRequest("PATCH", session.id, { theme: "neon" }));
     expect(response.status).toBe(400);
     const json = await response.json();
@@ -81,7 +81,7 @@ describe("PATCH /api/settings", () => {
   });
 
   it("returns 400 for a spoofed userId field", async () => {
-    const session = sessionFor("u1", "22");
+    const session = await sessionFor("u1", "22");
     const response = await PATCH(
       settingsRequest("PATCH", session.id, { theme: "dark", userId: "u2" }),
     );
@@ -89,8 +89,8 @@ describe("PATCH /api/settings", () => {
   });
 
   it("returns 200 and applies a partial update without resetting other fields", async () => {
-    const session = sessionFor("u3", "23");
-    const before = findUserById("u3")!.settings;
+    const session = await sessionFor("u3", "23");
+    const before = (await findUserById("u3"))!.settings;
 
     const response = await PATCH(settingsRequest("PATCH", session.id, { theme: "light" }));
     const json = await response.json();
@@ -100,15 +100,15 @@ describe("PATCH /api/settings", () => {
     expect(json.data.workDayHours).toBe(before.workDayHours);
     expect(json.data.notifications).toEqual(before.notifications);
     expect(json.data.taskDefaults).toEqual(before.taskDefaults);
-    expect(findUserById("u3")!.settings.theme).toBe("light");
+    expect((await findUserById("u3"))!.settings.theme).toBe("light");
   });
 
   it("cannot change another user's settings by sending their userId", async () => {
-    const session = sessionFor("u1", "24");
-    const u2Before = findUserById("u2")!.settings;
+    const session = await sessionFor("u1", "24");
+    const u2Before = (await findUserById("u2"))!.settings;
 
     await PATCH(settingsRequest("PATCH", session.id, { userId: "u2", theme: "dark" }));
 
-    expect(findUserById("u2")!.settings).toEqual(u2Before);
+    expect((await findUserById("u2"))!.settings).toEqual(u2Before);
   });
 });

@@ -10,7 +10,7 @@ A multi-user task/list manager built for a technical assessment: lists with Kanb
 - **Zod** for schema validation, shared between client and server
 - **Tailwind CSS + shadcn/ui** (`shared/ui/*`) built on `@base-ui/react` primitives
 - **Vitest + Testing Library** for tests (2000+ tests)
-- File-backed persistence (see below) — no external database
+- File-backed persistence locally; Vercel Blob in production (see below) — no external database
 
 ## Architecture
 
@@ -65,18 +65,20 @@ Passwords are stored as `demo:<plaintext>` hashes (`entities/user/*`) — a stan
 
 ## Persistence and runtime state
 
-There is no external database. All application data is file-backed JSON:
+There is no traditional external database. All application data is a single JSON document plus binary attachment blobs, behind one of two interchangeable backends selected automatically at runtime (`shared/lib/db.ts`, `shared/lib/session-store.ts`, `entities/attachment/storage.ts` each export a small `*Store` interface with two implementations):
 
-- `data.json` — the seed dataset (users, lists, tasks), checked into the repo, validated against the Zod schemas on load.
-- `.local-state/db.json` — the live runtime database. On first read it's seeded from `data.json`; every mutation reads, updates, and rewrites this file (`shared/lib/db.ts`). It's gitignored — deleting it resets the app back to the seed data.
-- `.local-state/attachments/<taskId>/<attachmentId>` — uploaded file bytes, stored on disk by server-generated id (not by filename, to avoid path traversal).
-- Sessions are also file-backed (`shared/lib/session-store`), for the same reason as `db.ts`: Next.js runs Route Handlers, Server Components, and the proxy in separate module graphs, so an in-memory singleton wouldn't be shared between them.
+- **Local development** (`npm run dev`/`npm start`, no `BLOB_READ_WRITE_TOKEN` set) — file-backed:
+  - `data.json` — the seed dataset (users, lists, tasks), checked into the repo, validated against the Zod schemas on load.
+  - `.local-state/db.json` — the live runtime database. On first read it's seeded from `data.json`; every mutation reads, updates, and rewrites this file. It's gitignored — deleting it resets the app back to the seed data.
+  - `.local-state/attachments/<taskId>/<attachmentId>` — uploaded file bytes, stored on disk by server-generated id (not by filename, to avoid path traversal).
+  - Sessions are also file-backed (`shared/lib/session-store`), for the same reason as `db.ts`: Next.js runs Route Handlers, Server Components, and the proxy in separate module graphs, so an in-memory singleton wouldn't be shared between them.
+- **Production on Vercel** (`BLOB_READ_WRITE_TOKEN` present, set automatically once a Blob store is attached to the project) — [Vercel Blob](https://vercel.com/docs/vercel-blob)-backed, same read-modify-write-the-whole-document semantics, just persisted as private blobs instead of local files: `db.json` and `sessions.json` each as one blob, one blob per attachment at `attachments/<taskId>/<attachmentId>`. This is what makes the app's session/login state and data actually survive between requests on a serverless platform — see "Deployment" below.
+- Vitest always uses a third, pure in-memory implementation of the same interfaces (`process.env.VITEST`), so tests never touch disk or the network.
 
-Writes go through a write-temp-then-rename step, so a crash mid-write can't corrupt the file — but there's no cross-process locking, so concurrent writers can race. This is fine for a single local Node process at demo scale; it is not a substitute for a real datastore under load.
+Every write replaces the whole document (file: write-temp-then-rename; Blob: `put` with `allowOverwrite`), so a crash mid-write can't corrupt it — but there's no cross-process locking, so concurrent writers can race. Fine at demo scale; not a substitute for a real datastore under load.
 
 ## Demo environment limitations
 
-- **Not deployable as-is to serverless platforms** (Vercel, Netlify Functions, etc.) — the filesystem those runtimes give each invocation is ephemeral and not shared across instances, so `.local-state/db.json`, session data, and uploaded attachments would not persist or stay consistent between requests. Running this app for real needs either a long-lived Node process with a persistent volume, or migrating persistence to an actual database/object storage — see "Deployment" below.
 - Deadline/time-threshold notifications are delivered by in-app polling (every 15s) while a tab is open — there's no push mechanism (email, web push) for a closed tab.
 - The "other users' changes" notification setting only synchronizes tabs of the *same browser* via `BroadcastChannel`; cross-device consistency still relies on the same 15s poll, not a websocket.
 - Session history shows an IP address, but in this local/demo setup it's a fixed placeholder value, not a real client IP.
@@ -109,7 +111,12 @@ State management is Redux Toolkit; server-state (notifications, comments, task u
 
 ## Deployment
 
-This app is **not currently deployed**. Locally, `npm run build` succeeds and `npm start` serves the production build correctly, but the file-backed persistence described above makes a plain deploy to Vercel/Netlify's serverless functions unsafe — data would silently reset or diverge between invocations. Shipping a real deployment would require either:
+Deployed to Vercel. To reproduce:
 
-- a single persistent Node process (e.g. a small VM or a platform's "always-on" container) with a writable, persistent volume for `.local-state/`, or
-- migrating `shared/lib/db.ts` and the attachment store to an actual database and object storage, which is out of scope for this assessment.
+1. Import the repo as a Vercel project (Vercel auto-detects Next.js).
+2. In the project's **Storage** tab, create a **Blob** store and connect it — Vercel injects `BLOB_READ_WRITE_TOKEN` into the project's environment automatically; no manual configuration needed.
+3. Deploy (or redeploy, if the Blob store was added after the first deploy — the token only takes effect on deploys made after it's connected).
+
+Without a Blob store attached, the app still builds and boots on Vercel, but every request falls back to the file-backed store, which serverless functions can't share across invocations — the demo data (and any login session) wouldn't persist between requests. See "Persistence and runtime state" above for how the backend is selected.
+
+A single persistent Node process (a VM, or a platform's "always-on" container) with a writable volume for `.local-state/` also works, using the file-backed store as-is, with no Blob store involved.

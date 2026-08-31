@@ -105,7 +105,7 @@ describe("ExportActions", () => {
     );
     render(<ExportActions listId="l1" listTitle="Work" tasks={[makeTask()]} />);
     await openMenu(user);
-    const click = user.click(screen.getByTestId("list-export-pdf"));
+    const click = await user.click(screen.getByTestId("list-export-pdf"));
     await waitFor(() => expect(screen.getByTestId("list-export-trigger")).toBeDisabled());
     expect(fetch).toHaveBeenCalledTimes(1);
     await user.click(screen.getByTestId("list-export-trigger"));

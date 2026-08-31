@@ -12,8 +12,8 @@ function safeParseQueryForScope(scope: SavedFilterScope, filter: SavedFilter): {
   return scope === "lists" ? safeParseSavedListFilterQuery(filter) : safeParseSavedFilterQuery(filter);
 }
 
-export function listSavedFiltersForUser(userId: string, scope: SavedFilterScope): SavedFilterGroups {
-  const filters = listSavedFilters(userId, scope);
+export async function listSavedFiltersForUser(userId: string, scope: SavedFilterScope): Promise<SavedFilterGroups> {
+  const filters = await listSavedFilters(userId, scope);
   const recent: SavedFilter[] = [];
   const saved: SavedFilter[] = [];
 

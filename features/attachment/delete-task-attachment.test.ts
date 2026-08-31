@@ -5,8 +5,8 @@ import { createTask, insertTasks } from "@/entities/task/repository";
 import { createAttachment, findAttachmentById, readAttachmentBytes } from "@/entities/attachment/repository";
 import { listActivityForTask } from "@/entities/activity/repository";
 
-function makeTaskIn(listId: string) {
-  return createTask({
+async function makeTaskIn(listId: string) {
+  return await createTask({
     listId,
     title: "Task",
     description: "",
@@ -24,10 +24,10 @@ function bytes(values: number[]): Uint8Array {
 }
 
 describe("deleteTaskAttachmentForUser", () => {
-  it("deletes the attachment for the task's owner, removing metadata and bytes", () => {
-    const list = createList("u-owner-1", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    const attachment = createAttachment({
+  it("deletes the attachment for the task's owner, removing metadata and bytes", async () => {
+    const list = await createList("u-owner-1", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    const attachment = await createAttachment({
       taskId: task.id,
       uploadedBy: "u-owner-1",
       filename: "a.txt",
@@ -35,18 +35,18 @@ describe("deleteTaskAttachmentForUser", () => {
       bytes: bytes([1, 2, 3]),
     });
 
-    const result = deleteTaskAttachmentForUser("u-owner-1", task.id, attachment.id);
+    const result = await deleteTaskAttachmentForUser("u-owner-1", task.id, attachment.id);
 
     expect(result.status).toBe("ok");
-    expect(findAttachmentById(attachment.id)).toBeUndefined();
-    expect(readAttachmentBytes(attachment)).toBeUndefined();
+    expect(await findAttachmentById(attachment.id)).toBeUndefined();
+    expect(await readAttachmentBytes(attachment)).toBeUndefined();
   });
 
-  it("allows a user with shared edit access to delete", () => {
-    const list = createList("u-owner-2", { title: "Shared", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u-editor-2", access: "edit" });
-    const task = makeTaskIn(list.id);
-    const attachment = createAttachment({
+  it("allows a user with shared edit access to delete", async () => {
+    const list = await createList("u-owner-2", { title: "Shared", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u-editor-2", access: "edit" });
+    const task = await makeTaskIn(list.id);
+    const attachment = await createAttachment({
       taskId: task.id,
       uploadedBy: "u-owner-2",
       filename: "a.txt",
@@ -54,14 +54,14 @@ describe("deleteTaskAttachmentForUser", () => {
       bytes: bytes([1]),
     });
 
-    expect(deleteTaskAttachmentForUser("u-editor-2", task.id, attachment.id).status).toBe("ok");
+    expect((await deleteTaskAttachmentForUser("u-editor-2", task.id, attachment.id)).status).toBe("ok");
   });
 
-  it("returns forbidden for a user with only shared read access, without deleting", () => {
-    const list = createList("u-owner-3", { title: "Shared", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u-viewer-3", access: "read" });
-    const task = makeTaskIn(list.id);
-    const attachment = createAttachment({
+  it("returns forbidden for a user with only shared read access, without deleting", async () => {
+    const list = await createList("u-owner-3", { title: "Shared", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u-viewer-3", access: "read" });
+    const task = await makeTaskIn(list.id);
+    const attachment = await createAttachment({
       taskId: task.id,
       uploadedBy: "u-owner-3",
       filename: "a.txt",
@@ -69,16 +69,16 @@ describe("deleteTaskAttachmentForUser", () => {
       bytes: bytes([1]),
     });
 
-    const result = deleteTaskAttachmentForUser("u-viewer-3", task.id, attachment.id);
+    const result = await deleteTaskAttachmentForUser("u-viewer-3", task.id, attachment.id);
 
     expect(result.status).toBe("forbidden");
-    expect(findAttachmentById(attachment.id)).toBeDefined();
+    expect(await findAttachmentById(attachment.id)).toBeDefined();
   });
 
-  it("returns not_found instead of leaking the existence of a stranger's task", () => {
-    const list = createList("u-owner-4", { title: "Private", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    const attachment = createAttachment({
+  it("returns not_found instead of leaking the existence of a stranger's task", async () => {
+    const list = await createList("u-owner-4", { title: "Private", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    const attachment = await createAttachment({
       taskId: task.id,
       uploadedBy: "u-owner-4",
       filename: "a.txt",
@@ -86,21 +86,21 @@ describe("deleteTaskAttachmentForUser", () => {
       bytes: bytes([1]),
     });
 
-    expect(deleteTaskAttachmentForUser("u-stranger-4", task.id, attachment.id).status).toBe("not_found");
+    expect((await deleteTaskAttachmentForUser("u-stranger-4", task.id, attachment.id)).status).toBe("not_found");
   });
 
-  it("returns not_found for an unknown attachment id", () => {
-    const list = createList("u-owner-5", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+  it("returns not_found for an unknown attachment id", async () => {
+    const list = await createList("u-owner-5", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
-    expect(deleteTaskAttachmentForUser("u-owner-5", task.id, "does-not-exist").status).toBe("not_found");
+    expect((await deleteTaskAttachmentForUser("u-owner-5", task.id, "does-not-exist")).status).toBe("not_found");
   });
 
-  it("returns not_found when the attachment belongs to a different task than the one in the URL (no IDOR via mismatched ids)", () => {
-    const list = createList("u-owner-6", { title: "Owned", template: "work", deadline: null });
-    const taskA = makeTaskIn(list.id);
-    const taskB = makeTaskIn(list.id);
-    const attachment = createAttachment({
+  it("returns not_found when the attachment belongs to a different task than the one in the URL (no IDOR via mismatched ids)", async () => {
+    const list = await createList("u-owner-6", { title: "Owned", template: "work", deadline: null });
+    const taskA = await makeTaskIn(list.id);
+    const taskB = await makeTaskIn(list.id);
+    const attachment = await createAttachment({
       taskId: taskA.id,
       uploadedBy: "u-owner-6",
       filename: "a.txt",
@@ -108,31 +108,31 @@ describe("deleteTaskAttachmentForUser", () => {
       bytes: bytes([1]),
     });
 
-    const result = deleteTaskAttachmentForUser("u-owner-6", taskB.id, attachment.id);
+    const result = await deleteTaskAttachmentForUser("u-owner-6", taskB.id, attachment.id);
 
     expect(result.status).toBe("not_found");
-    expect(findAttachmentById(attachment.id)).toBeDefined();
+    expect(await findAttachmentById(attachment.id)).toBeDefined();
   });
 
-  it("returns not_found for a soft-deleted task, even for its owner", () => {
-    const list = createList("u-owner-7", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    const attachment = createAttachment({
+  it("returns not_found for a soft-deleted task, even for its owner", async () => {
+    const list = await createList("u-owner-7", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    const attachment = await createAttachment({
       taskId: task.id,
       uploadedBy: "u-owner-7",
       filename: "a.txt",
       mimeType: "text/plain",
       bytes: bytes([1]),
     });
-    insertTasks([{ ...task, deletedAt: "2026-08-01T00:00:00.000Z" }]);
+    await insertTasks([{ ...task, deletedAt: "2026-08-01T00:00:00.000Z" }]);
 
-    expect(deleteTaskAttachmentForUser("u-owner-7", task.id, attachment.id).status).toBe("not_found");
+    expect((await deleteTaskAttachmentForUser("u-owner-7", task.id, attachment.id)).status).toBe("not_found");
   });
 
-  it("returns not_found (not a crash) when deleting the same attachment twice", () => {
-    const list = createList("u-owner-8", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    const attachment = createAttachment({
+  it("returns not_found (not a crash) when deleting the same attachment twice", async () => {
+    const list = await createList("u-owner-8", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    const attachment = await createAttachment({
       taskId: task.id,
       uploadedBy: "u-owner-8",
       filename: "a.txt",
@@ -140,16 +140,16 @@ describe("deleteTaskAttachmentForUser", () => {
       bytes: bytes([1]),
     });
 
-    expect(deleteTaskAttachmentForUser("u-owner-8", task.id, attachment.id).status).toBe("ok");
-    expect(deleteTaskAttachmentForUser("u-owner-8", task.id, attachment.id).status).toBe("not_found");
+    expect((await deleteTaskAttachmentForUser("u-owner-8", task.id, attachment.id)).status).toBe("ok");
+    expect((await deleteTaskAttachmentForUser("u-owner-8", task.id, attachment.id)).status).toBe("not_found");
   });
 });
 
 describe("deleteTaskAttachmentForUser activity logging", () => {
-  it("records an attachment_deleted activity for the deleting user after a successful delete", () => {
-    const list = createList("u-owner-30", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    const attachment = createAttachment({
+  it("records an attachment_deleted activity for the deleting user after a successful delete", async () => {
+    const list = await createList("u-owner-30", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    const attachment = await createAttachment({
       taskId: task.id,
       uploadedBy: "u-owner-30",
       filename: "report.pdf",
@@ -157,10 +157,10 @@ describe("deleteTaskAttachmentForUser activity logging", () => {
       bytes: bytes([1, 2, 3]),
     });
 
-    const result = deleteTaskAttachmentForUser("u-owner-30", task.id, attachment.id);
+    const result = await deleteTaskAttachmentForUser("u-owner-30", task.id, attachment.id);
 
     expect(result.status).toBe("ok");
-    const activity = listActivityForTask(task.id);
+    const activity = await listActivityForTask(task.id);
     expect(activity).toHaveLength(1);
     expect(activity[0]).toMatchObject({
       entityType: "task",
@@ -174,11 +174,11 @@ describe("deleteTaskAttachmentForUser activity logging", () => {
     });
   });
 
-  it("does not record activity when the delete is forbidden (shared read-only access)", () => {
-    const list = createList("u-owner-31", { title: "Shared", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u-viewer-31", access: "read" });
-    const task = makeTaskIn(list.id);
-    const attachment = createAttachment({
+  it("does not record activity when the delete is forbidden (shared read-only access)", async () => {
+    const list = await createList("u-owner-31", { title: "Shared", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u-viewer-31", access: "read" });
+    const task = await makeTaskIn(list.id);
+    const attachment = await createAttachment({
       taskId: task.id,
       uploadedBy: "u-owner-31",
       filename: "a.txt",
@@ -186,24 +186,24 @@ describe("deleteTaskAttachmentForUser activity logging", () => {
       bytes: bytes([1]),
     });
 
-    deleteTaskAttachmentForUser("u-viewer-31", task.id, attachment.id);
+    await deleteTaskAttachmentForUser("u-viewer-31", task.id, attachment.id);
 
-    expect(listActivityForTask(task.id)).toEqual([]);
+    expect(await listActivityForTask(task.id)).toEqual([]);
   });
 
-  it("does not record activity when the attachment id does not exist", () => {
-    const list = createList("u-owner-32", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
+  it("does not record activity when the attachment id does not exist", async () => {
+    const list = await createList("u-owner-32", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
 
-    deleteTaskAttachmentForUser("u-owner-32", task.id, "does-not-exist");
+    await deleteTaskAttachmentForUser("u-owner-32", task.id, "does-not-exist");
 
-    expect(listActivityForTask(task.id)).toEqual([]);
+    expect(await listActivityForTask(task.id)).toEqual([]);
   });
 
-  it("does not double-record activity when deleting the same attachment twice", () => {
-    const list = createList("u-owner-33", { title: "Owned", template: "work", deadline: null });
-    const task = makeTaskIn(list.id);
-    const attachment = createAttachment({
+  it("does not double-record activity when deleting the same attachment twice", async () => {
+    const list = await createList("u-owner-33", { title: "Owned", template: "work", deadline: null });
+    const task = await makeTaskIn(list.id);
+    const attachment = await createAttachment({
       taskId: task.id,
       uploadedBy: "u-owner-33",
       filename: "a.txt",
@@ -211,9 +211,9 @@ describe("deleteTaskAttachmentForUser activity logging", () => {
       bytes: bytes([1]),
     });
 
-    deleteTaskAttachmentForUser("u-owner-33", task.id, attachment.id);
-    deleteTaskAttachmentForUser("u-owner-33", task.id, attachment.id);
+    await deleteTaskAttachmentForUser("u-owner-33", task.id, attachment.id);
+    await deleteTaskAttachmentForUser("u-owner-33", task.id, attachment.id);
 
-    expect(listActivityForTask(task.id)).toHaveLength(1);
+    expect(await listActivityForTask(task.id)).toHaveLength(1);
   });
 });

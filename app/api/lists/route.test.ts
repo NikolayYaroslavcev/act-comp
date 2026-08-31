@@ -49,13 +49,13 @@ describe("GET /api/lists", () => {
   });
 
   it("returns 401 for a revoked session", async () => {
-    const session = createSession({
+    const session = await createSession({
       userId: "u1",
       ip: "192.0.2.5 (demo)",
       device: "Chrome on Windows",
       rememberMe: false,
     });
-    revokeSession(session.id);
+    await revokeSession(session.id);
 
     const response = await GET(listsRequest(session.id));
 
@@ -63,7 +63,7 @@ describe("GET /api/lists", () => {
   });
 
   it("returns 200 with the lists for a valid active session", async () => {
-    const session = createSession({
+    const session = await createSession({
       userId: "u1",
       ip: "192.0.2.5 (demo)",
       device: "Chrome on Windows",
@@ -78,13 +78,13 @@ describe("GET /api/lists", () => {
   });
 
   it("includes a list owned by the current user", async () => {
-    const session = createSession({
+    const session = await createSession({
       userId: "u1",
       ip: "192.0.2.60 (demo)",
       device: "Chrome on Windows",
       rememberMe: false,
     });
-    const list = createList("u1", { title: "Owned by u1", template: "work", deadline: null });
+    const list = await createList("u1", { title: "Owned by u1", template: "work", deadline: null });
 
     const response = await GET(listsRequest(session.id));
 
@@ -93,14 +93,14 @@ describe("GET /api/lists", () => {
   });
 
   it("includes a list shared with read access", async () => {
-    const session = createSession({
+    const session = await createSession({
       userId: "u2",
       ip: "192.0.2.61 (demo)",
       device: "Chrome on Windows",
       rememberMe: false,
     });
-    const list = createList("u1", { title: "Shared read", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "read" });
+    const list = await createList("u1", { title: "Shared read", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "read" });
 
     const response = await GET(listsRequest(session.id));
 
@@ -109,14 +109,14 @@ describe("GET /api/lists", () => {
   });
 
   it("includes a list shared with edit access", async () => {
-    const session = createSession({
+    const session = await createSession({
       userId: "u2",
       ip: "192.0.2.62 (demo)",
       device: "Chrome on Windows",
       rememberMe: false,
     });
-    const list = createList("u1", { title: "Shared edit", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "edit" });
+    const list = await createList("u1", { title: "Shared edit", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "edit" });
 
     const response = await GET(listsRequest(session.id));
 
@@ -125,13 +125,13 @@ describe("GET /api/lists", () => {
   });
 
   it("excludes a private list owned by another user", async () => {
-    const session = createSession({
+    const session = await createSession({
       userId: "u2",
       ip: "192.0.2.63 (demo)",
       device: "Chrome on Windows",
       rememberMe: false,
     });
-    const list = createList("u1", { title: "Private to u1", template: "work", deadline: null });
+    const list = await createList("u1", { title: "Private to u1", template: "work", deadline: null });
 
     const response = await GET(listsRequest(session.id));
 
@@ -140,14 +140,14 @@ describe("GET /api/lists", () => {
   });
 
   it("excludes a soft-deleted list even for its owner", async () => {
-    const session = createSession({
+    const session = await createSession({
       userId: "u1",
       ip: "192.0.2.64 (demo)",
       device: "Chrome on Windows",
       rememberMe: false,
     });
-    const list = createList("u1", { title: "Deleted", template: "work", deadline: null });
-    findListById(list.id)!.deletedAt = "2026-08-01T00:00:00.000Z";
+    const list = await createList("u1", { title: "Deleted", template: "work", deadline: null });
+    (await findListById(list.id))!.deletedAt = "2026-08-01T00:00:00.000Z";
 
     const response = await GET(listsRequest(session.id));
 
@@ -156,13 +156,13 @@ describe("GET /api/lists", () => {
   });
 
   it("ignores a spoofed userId in the query string and scopes results to the session's user", async () => {
-    const session = createSession({
+    const session = await createSession({
       userId: "u2",
       ip: "192.0.2.65 (demo)",
       device: "Chrome on Windows",
       rememberMe: false,
     });
-    const otherList = createList("u1", { title: "Belongs to u1", template: "work", deadline: null });
+    const otherList = await createList("u1", { title: "Belongs to u1", template: "work", deadline: null });
 
     const spoofedRequest = new NextRequest("http://localhost/api/lists?userId=u1", {
       headers: { cookie: `${SESSION_COOKIE_NAME}=${session.id}` },
@@ -185,7 +185,7 @@ describe("POST /api/lists", () => {
   });
 
   it("returns 400 for invalid JSON", async () => {
-    const session = createSession({
+    const session = await createSession({
       userId: "u1",
       ip: "192.0.2.20 (demo)",
       device: "Chrome on Windows",
@@ -198,7 +198,7 @@ describe("POST /api/lists", () => {
   });
 
   it("returns 400 for a Zod validation error", async () => {
-    const session = createSession({
+    const session = await createSession({
       userId: "u1",
       ip: "192.0.2.21 (demo)",
       device: "Chrome on Windows",
@@ -215,7 +215,7 @@ describe("POST /api/lists", () => {
   });
 
   it("creates a list owned by the current session's user on valid input", async () => {
-    const session = createSession({
+    const session = await createSession({
       userId: "u1",
       ip: "192.0.2.22 (demo)",
       device: "Chrome on Windows",
@@ -231,11 +231,11 @@ describe("POST /api/lists", () => {
     expect(json.data.ownerId).toBe("u1");
     expect(json.data.title).toBe("New list");
     expect(json.data.template).toBe("work");
-    expect(findListById(json.data.id)).toBeDefined();
+    expect(await findListById(json.data.id)).toBeDefined();
   });
 
   it("ignores a client-supplied ownerId and uses the session's user instead", async () => {
-    const session = createSession({
+    const session = await createSession({
       userId: "u1",
       ip: "192.0.2.23 (demo)",
       device: "Chrome on Windows",

@@ -22,17 +22,17 @@ export type UploadTaskAttachmentOutcome =
 
 // Uploading requires edit access to the parent list, not merely view access —
 // same reasoning as createTaskCommentForUser: it's a mutation on the task.
-export function uploadTaskAttachmentForUser(
+export async function uploadTaskAttachmentForUser(
   userId: string,
   taskId: string,
   input: UploadTaskAttachmentInput,
-): UploadTaskAttachmentOutcome {
-  const task = findTaskById(taskId);
+): Promise<UploadTaskAttachmentOutcome> {
+  const task = await findTaskById(taskId);
   if (!task || task.deletedAt !== null) {
     return { status: "not_found" };
   }
 
-  const list = findListById(task.listId);
+  const list = await findListById(task.listId);
   if (!list || list.deletedAt !== null || !canViewList(list, userId)) {
     return { status: "not_found" };
   }
@@ -49,7 +49,7 @@ export function uploadTaskAttachmentForUser(
     return { status: "too_large" };
   }
 
-  const attachment = createAttachment({
+  const attachment = await createAttachment({
     taskId,
     uploadedBy: userId,
     filename: input.filename,
@@ -57,7 +57,7 @@ export function uploadTaskAttachmentForUser(
     bytes: input.bytes,
   });
 
-  recordActivity({
+  await recordActivity({
     entityType: "task",
     entityId: taskId,
     action: "attachment_added",
@@ -68,6 +68,6 @@ export function uploadTaskAttachmentForUser(
 
   return {
     status: "ok",
-    attachment: { ...attachment, uploaderEmail: findUserById(userId)?.email ?? userId },
+    attachment: { ...attachment, uploaderEmail: (await findUserById(userId))?.email ?? userId },
   };
 }

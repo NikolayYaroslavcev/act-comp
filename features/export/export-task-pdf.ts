@@ -9,13 +9,13 @@ export type ExportTaskPdfResult =
   | { status: "ok"; bytes: Uint8Array; filename: string };
 
 export async function exportTaskPdf(userId: string, taskId: string): Promise<ExportTaskPdfResult> {
-  const visible = getVisibleTask(userId, taskId);
+  const visible = await getVisibleTask(userId, taskId);
   if (visible.status === "not_found") {
     return { status: "not_found" };
   }
 
   const { task } = visible;
-  const codeById = new Map(listVisibleTasks(userId, task.listId).map((candidate) => [candidate.id, candidate.code]));
+  const codeById = new Map((await listVisibleTasks(userId, task.listId)).map((candidate) => [candidate.id, candidate.code]));
   const parentCode = task.parentId !== null ? (codeById.get(task.parentId) ?? null) : null;
   const dependencyCodes = task.dependsOn
     .map((id) => codeById.get(id))

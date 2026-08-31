@@ -27,15 +27,15 @@ function shareRequestWithRawBody(id: string, sessionId: string, rawBody: string)
   });
 }
 
-function callShare(id: string, request: NextRequest) {
-  return POST(request, { params: Promise.resolve({ id }) });
+async function callShare(id: string, request: NextRequest) {
+  return await POST(request, { params: Promise.resolve({ id }) });
 }
 
 // The seed data only defines users u1/u2/u3 (see data.json) — requireAuth
 // resolves a session to a real user, so tests must reuse those ids rather
 // than inventing arbitrary owner ids.
-function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
-  return createSession({
+async function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
+  return await createSession({
     userId,
     ip: `192.0.2.${suffix} (demo)`,
     device: "Chrome on Windows",
@@ -45,7 +45,7 @@ function sessionFor(userId: "u1" | "u2" | "u3", suffix: string) {
 
 describe("POST /api/lists/[id]/share", () => {
   it("returns 401 when no session cookie is present", async () => {
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
 
     const response = await callShare(list.id, shareRequest(list.id, undefined, { userId: "u2", access: "read" }));
 
@@ -53,7 +53,7 @@ describe("POST /api/lists/[id]/share", () => {
   });
 
   it("returns 404 for an unknown list id", async () => {
-    const session = sessionFor("u1", "60");
+    const session = await sessionFor("u1", "60");
 
     const response = await callShare(
       "does-not-exist",
@@ -64,8 +64,8 @@ describe("POST /api/lists/[id]/share", () => {
   });
 
   it("returns 404 when the caller does not own the list", async () => {
-    const stranger = sessionFor("u3", "61");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
+    const stranger = await sessionFor("u3", "61");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
 
     const response = await callShare(list.id, shareRequest(list.id, stranger.id, { userId: "u2", access: "read" }));
 
@@ -73,9 +73,9 @@ describe("POST /api/lists/[id]/share", () => {
   });
 
   it("returns 403 for an edit-access collaborator (only the owner manages sharing)", async () => {
-    const collaboratorSession = sessionFor("u2", "62");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    findListById(list.id)!.sharedWith.push({ userId: "u2", access: "edit" });
+    const collaboratorSession = await sessionFor("u2", "62");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    (await findListById(list.id))!.sharedWith.push({ userId: "u2", access: "edit" });
 
     const response = await callShare(
       list.id,
@@ -86,8 +86,8 @@ describe("POST /api/lists/[id]/share", () => {
   });
 
   it("returns 400 for invalid JSON", async () => {
-    const session = sessionFor("u1", "63");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
+    const session = await sessionFor("u1", "63");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
 
     const response = await callShare(list.id, shareRequestWithRawBody(list.id, session.id, "{not-json"));
 
@@ -95,8 +95,8 @@ describe("POST /api/lists/[id]/share", () => {
   });
 
   it("returns 400 when neither userId nor email is provided", async () => {
-    const session = sessionFor("u1", "64");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
+    const session = await sessionFor("u1", "64");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
 
     const response = await callShare(list.id, shareRequest(list.id, session.id, { access: "read" }));
 
@@ -104,8 +104,8 @@ describe("POST /api/lists/[id]/share", () => {
   });
 
   it("returns 400 for an invalid access value", async () => {
-    const session = sessionFor("u1", "65");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
+    const session = await sessionFor("u1", "65");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
 
     const response = await callShare(list.id, shareRequest(list.id, session.id, { userId: "u2", access: "admin" }));
 
@@ -113,8 +113,8 @@ describe("POST /api/lists/[id]/share", () => {
   });
 
   it("returns 400 when the target user does not exist, without revealing that they are missing", async () => {
-    const session = sessionFor("u1", "66");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
+    const session = await sessionFor("u1", "66");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
 
     const response = await callShare(
       list.id,
@@ -127,8 +127,8 @@ describe("POST /api/lists/[id]/share", () => {
   });
 
   it("returns 400 when the owner tries to share the list with themselves", async () => {
-    const session = sessionFor("u1", "67");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
+    const session = await sessionFor("u1", "67");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
 
     const response = await callShare(list.id, shareRequest(list.id, session.id, { userId: "u1", access: "read" }));
 
@@ -136,8 +136,8 @@ describe("POST /api/lists/[id]/share", () => {
   });
 
   it("returns 200 and the updated list for a valid share by the owner", async () => {
-    const session = sessionFor("u1", "68");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
+    const session = await sessionFor("u1", "68");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
 
     const response = await callShare(list.id, shareRequest(list.id, session.id, { userId: "u2", access: "read" }));
 
@@ -147,8 +147,8 @@ describe("POST /api/lists/[id]/share", () => {
   });
 
   it("resolves the target user by email", async () => {
-    const session = sessionFor("u1", "69");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
+    const session = await sessionFor("u1", "69");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
 
     const response = await callShare(
       list.id,
@@ -161,8 +161,8 @@ describe("POST /api/lists/[id]/share", () => {
   });
 
   it("cannot be used to spoof the owner via the request body", async () => {
-    const session = sessionFor("u1", "70");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
+    const session = await sessionFor("u1", "70");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
 
     const response = await callShare(
       list.id,
@@ -170,13 +170,13 @@ describe("POST /api/lists/[id]/share", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(findListById(list.id)?.ownerId).toBe("u1");
+    expect((await findListById(list.id))?.ownerId).toBe("u1");
   });
 
   it("returns 404 for a soft-deleted list", async () => {
-    const session = sessionFor("u1", "71");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
-    findListById(list.id)!.deletedAt = new Date().toISOString();
+    const session = await sessionFor("u1", "71");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
+    (await findListById(list.id))!.deletedAt = new Date().toISOString();
 
     const response = await callShare(list.id, shareRequest(list.id, session.id, { userId: "u2", access: "read" }));
 
@@ -184,8 +184,8 @@ describe("POST /api/lists/[id]/share", () => {
   });
 
   it("updates access on a repeated share call instead of duplicating the entry", async () => {
-    const session = sessionFor("u1", "72");
-    const list = createList("u1", { title: "Owned", template: "work", deadline: null });
+    const session = await sessionFor("u1", "72");
+    const list = await createList("u1", { title: "Owned", template: "work", deadline: null });
 
     await callShare(list.id, shareRequest(list.id, session.id, { userId: "u2", access: "read" }));
     const response = await callShare(list.id, shareRequest(list.id, session.id, { userId: "u2", access: "edit" }));

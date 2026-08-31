@@ -18,13 +18,13 @@ export default async function ListDetailPage({ params }: ListDetailPageProps) {
   const { id } = await params;
   const cookieStore = await cookies();
   const sessionId = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-  const current = getCurrentSession(sessionId);
+  const current = await getCurrentSession(sessionId);
 
   if (!current) {
     return redirect("/login");
   }
 
-  const result = getVisibleList(current.user.id, id);
+  const result = await getVisibleList(current.user.id, id);
   if (result.status === "not_found") {
     return (
       <div className="flex min-w-0 flex-1 flex-col overflow-x-hidden bg-muted/40">
@@ -41,8 +41,8 @@ export default async function ListDetailPage({ params }: ListDetailPageProps) {
     );
   }
 
-  const tasks = listVisibleTasks(current.user.id, id);
-  const historyResult = getListHistoryForUser(current.user.id, id);
+  const tasks = await listVisibleTasks(current.user.id, id);
+  const historyResult = await getListHistoryForUser(current.user.id, id);
   const history = historyResult.status === "ok" ? historyResult.history : [];
 
   return (
