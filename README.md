@@ -91,7 +91,7 @@ Email/password login (`features/auth/login-form.tsx`) with real-time validation 
 ## Key features
 
 - **Lists**: create (from a template), edit (with history), soft-delete + restore (30-day window), duplicate, sharing (read-only / edit access per collaborator), search/filter with saved & recent filters, CSV/PDF export.
-- **Tasks**: rich fields, dependencies (`dependsOn`) with cycle detection and cascading status updates, subtasks with parent progress roll-up, soft-delete + restore, clone-with-modification, auto-generated `TEST-N` codes that backfill gaps left by deletions.
+- **Tasks**: create, rich fields, dependencies (`dependsOn`) with cycle detection and cascading status updates, subtasks with parent progress roll-up, soft-delete + restore, clone-with-modification, auto-generated `TEST-N` codes that backfill gaps left by deletions.
 - **Kanban board**: drag-and-drop status changes (`features/task/use-kanban-board.ts`) go through the same update path as a manual edit, so dependency/cascade rules apply identically either way. Includes per-column empty state, an in-flight save indicator, and an aggregate error banner for a failed move — all sourced from the same client-side mutation state used to disable/re-enable the drag handle.
 - **Smart Priority**: `entities/task/model.ts:calculatePriority` combines deadline proximity, dependency chain position, user-set priority, and historical time-on-similar-tasks into one score, shown alongside the raw priority.
 - **Completion Prediction**: `entities/task/completion-prediction.ts` projects a finish time from the same calendar-aware elapsed-time engine and historical-task provider used by Smart Priority.

@@ -9,6 +9,7 @@ import { useSavedFilters } from "@/features/saved-filter/use-saved-filters";
 import { usePagedItems } from "@/shared/lib/use-paged-items";
 import { cn } from "@/shared/lib/utils";
 import { PaginationBar } from "@/shared/ui/pagination";
+import { CreateTaskDialog } from "./create-task-dialog";
 import { ExportActions } from "./export-actions";
 import { TaskFilters } from "./task-filters";
 import { SavedFiltersPanel } from "./saved-filters-panel";
@@ -32,6 +33,7 @@ interface TaskListProps {
   canEdit?: boolean;
   otherUserChangesEnabled?: boolean;
   exportList?: { id: string; title: string };
+  listId?: string;
 }
 
 export function TaskList({
@@ -41,6 +43,7 @@ export function TaskList({
   canEdit = false,
   otherUserChangesEnabled = false,
   exportList,
+  listId,
 }: TaskListProps) {
   const [tasks, setTasks] = useState(initialTasks);
   const [view, setView] = useState<"list" | "kanban">("list");
@@ -121,14 +124,24 @@ export function TaskList({
           </button>
         </div>
 
-        {exportList && (
-          <ExportActions
-            listId={exportList.id}
-            listTitle={exportList.title}
-            tasks={filteredTasks}
-            lookupTasks={tasks}
-          />
-        )}
+        <div className="flex flex-wrap items-center gap-3">
+          {canEdit && listId && (
+            <CreateTaskDialog
+              listId={listId}
+              onCreated={(createdTask) => {
+                setTasks((current) => [...current, createdTask]);
+              }}
+            />
+          )}
+          {exportList && (
+            <ExportActions
+              listId={exportList.id}
+              listTitle={exportList.title}
+              tasks={filteredTasks}
+              lookupTasks={tasks}
+            />
+          )}
+        </div>
       </div>
 
       {tasks.length === 0 ? (

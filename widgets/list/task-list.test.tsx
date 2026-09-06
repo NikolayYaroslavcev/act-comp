@@ -384,6 +384,51 @@ describe("TaskList reflecting a clone", () => {
   });
 });
 
+describe("TaskList create task", () => {
+  it("shows the Create Task button for an editor with a listId", () => {
+    render(<TaskList tasks={[]} now={NOW} canEdit listId="l1" />);
+
+    expect(screen.getByRole("button", { name: "Создать задачу" })).toBeInTheDocument();
+  });
+
+  it("does not show the Create Task button for a read-only user", () => {
+    render(<TaskList tasks={[]} now={NOW} listId="l1" />);
+
+    expect(screen.queryByRole("button", { name: "Создать задачу" })).not.toBeInTheDocument();
+  });
+
+  it("does not show the Create Task button without a listId", () => {
+    render(<TaskList tasks={[]} now={NOW} canEdit />);
+
+    expect(screen.queryByRole("button", { name: "Создать задачу" })).not.toBeInTheDocument();
+  });
+
+  it("adds the created task to the list", async () => {
+    const user = userEvent.setup();
+    const createdTask = makeTask({ id: "t2", code: "TEST-2", title: "Новая задача" });
+    stubFetchForTaskAction(() => jsonResponse(201, { data: createdTask }));
+    render(
+      <TaskList
+        tasks={[makeTask({ id: "t1", code: "TEST-1", title: "Существующая" })]}
+        now={NOW}
+        canEdit
+        listId="l1"
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Создать задачу" }));
+    await user.type(screen.getByLabelText("Название"), "Новая задача");
+    await user.click(screen.getByRole("button", { name: "Создать" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    const rows = screen.getAllByTestId("task-row");
+    expect(rows).toHaveLength(2);
+    expect(screen.getByText("Существующая")).toBeInTheDocument();
+    expect(screen.getByText("Новая задача")).toBeInTheDocument();
+  });
+});
+
 describe("TaskList search and filters", () => {
   it("filters visible rows by search text after Apply", async () => {
     const user = userEvent.setup();

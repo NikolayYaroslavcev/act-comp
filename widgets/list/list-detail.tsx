@@ -108,6 +108,7 @@ export function ListDetail({
         canEdit={canEditList(list, currentUserId)}
         otherUserChangesEnabled={otherUserChangesEnabled}
         exportList={{ id: list.id, title: list.title }}
+        listId={list.id}
       />
     </div>
   );
