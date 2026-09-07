@@ -2,6 +2,8 @@
 
 A multi-user task/list manager built for a technical assessment: lists with Kanban and list views, dependency-aware task scheduling, a per-task timer with calendar-aware time accounting, notifications, attachments, comments, activity logging, version rollback, and CSV/PDF/Excel export.
 
+🔗 **Live demo:** [act-comp.vercel.app](https://act-comp.vercel.app/)
+
 ## Stack
 
 - **Next.js 16** (App Router, Route Handlers, Server Components) — see `AGENTS.md`, this is a newer major version with real API differences from the version most tooling was trained on
