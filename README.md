@@ -1,20 +1,24 @@
 # Task Manager
 
-A multi-user task/list manager built for a technical assessment: lists with Kanban and list views, dependency-aware task scheduling, a per-task timer with calendar-aware time accounting, notifications, attachments, comments, activity logging, version rollback, and CSV/PDF/Excel export.
+**Русский** · [English](README.en.md)
 
-## Stack
+Многопользовательский менеджер задач и списков, сделанный для технического задания: списки с режимами Kanban и списка, планирование задач с учётом зависимостей, таймер на каждой задаче с учётом рабочего календаря, уведомления, вложения, комментарии, журнал активности, откат версий и экспорт в CSV/PDF/Excel.
 
-- **Next.js 16** (App Router, Route Handlers, Server Components) — see `AGENTS.md`, this is a newer major version with real API differences from the version most tooling was trained on
-- **TypeScript**, strict mode
-- **Redux Toolkit + RTK Query** for server-state (notifications, comments, activity, task updates) — the rest of the UI uses local React state
-- **Zod** for schema validation, shared between client and server
-- **Tailwind CSS + shadcn/ui** (`shared/ui/*`) built on `@base-ui/react` primitives
-- **Vitest + Testing Library** for tests (2000+ tests)
-- File-backed persistence locally; Vercel Blob in production (see below) — no external database
+![Task Manager](docs/screenshot.png)
 
-## Architecture
+## Стек
 
-Layered, roughly Clean-Architecture-shaped:
+- **Next.js 16** (App Router, Route Handlers, Server Components). См. `AGENTS.md`: это новая мажорная версия, и её API заметно отличается от версии, на которой обучено большинство инструментов
+- **TypeScript**, строгий режим
+- **Redux Toolkit + RTK Query** для серверного состояния (уведомления, комментарии, активность, обновления задач). Остальной UI использует локальное состояние React
+- **Zod** для валидации схем, общих у клиента и сервера
+- **Tailwind CSS + shadcn/ui** (`shared/ui/*`) на примитивах `@base-ui/react`
+- **Vitest + Testing Library** для тестов (более 2000 тестов)
+- Локально данные хранятся в файлах, в продакшене в Vercel Blob (см. ниже). Внешней базы данных нет
+
+## Архитектура
+
+Слоистая, примерно в духе Clean Architecture:
 
 ```
 entities/   pure domain logic + Zod schemas + repositories (schema, model, repository)
@@ -24,17 +28,17 @@ app/        Next.js routes: pages (Server Components) + API route handlers
 shared/     cross-cutting: UI primitives, the Redux store, db access, utilities
 ```
 
-- `entities/*/model.ts` holds business logic as pure functions (priority calculation, dependency cycles, calendar-aware elapsed time, notification thresholds, rollback reconstruction) — this is deliberately not split into a separate `/domain` folder; the split is architectural, not physical.
-- `entities/*/repository.ts` is the only layer that touches persistence.
-- `features/*` wraps a repository/model call behind a permission check (`canViewList`/`canEditList`) and exposes either a server-side "for user" function (used by API routes) or a client hook.
-- API routes under `app/api/**` are thin: auth → permission-checked feature call → JSON response.
+- `entities/*/model.ts` содержит бизнес-логику в виде чистых функций (расчёт приоритета, циклы зависимостей, прошедшее время с учётом календаря, пороги уведомлений, восстановление при откате). Отдельной папки `/domain` намеренно нет: разделение архитектурное, а не физическое.
+- `entities/*/repository.ts` это единственный слой, который работает с хранилищем.
+- `features/*` оборачивает вызов репозитория или модели в проверку прав (`canViewList`/`canEditList`) и предоставляет либо серверную функцию «for user» (её используют API-роуты), либо клиентский хук.
+- API-роуты в `app/api/**` тонкие: аутентификация → вызов feature с проверкой прав → JSON-ответ.
 
-## Requirements
+## Требования
 
-- Node.js >= 20.9 (matches Next.js 16's own engine requirement)
-- npm (the repo ships a `package-lock.json`; no yarn/pnpm lockfile)
+- Node.js >= 20.9 (совпадает с требованием самого Next.js 16)
+- npm (в репозитории лежит `package-lock.json`, lock-файлов yarn/pnpm нет)
 
-## Getting started
+## Быстрый старт
 
 ```bash
 npm install
@@ -51,72 +55,72 @@ npm run lint         # eslint
 npx knip              # unused files/exports/deps
 ```
 
-## Demo credentials
+## Демо-доступ
 
-Seeded in `data.json`:
+Заполнено из `data.json`:
 
-| Email | Password | Notes |
+| Email | Пароль | Примечания |
 |---|---|---|
-| `admin@example.com` | `Admin123!` | owns most seed lists |
-| `user@example.com` | `User123!` | has shared access to some of admin's lists |
-| `guest@example.com` | `Guest123!` | limited/read-only access, useful for permission testing |
+| `admin@example.com` | `Admin123!` | владеет большинством seed-списков |
+| `user@example.com` | `User123!` | имеет общий доступ к некоторым спискам admin |
+| `guest@example.com` | `Guest123!` | ограниченный доступ только на чтение, удобен для проверки прав |
 
-Passwords are stored as `demo:<plaintext>` hashes (`entities/user/*`) — a stand-in for real hashing (e.g. bcrypt), acceptable for a local demo but **not production-safe**.
+Пароли хранятся как хеши вида `demo:<plaintext>` (`entities/user/*`). Это замена настоящему хешированию (например, bcrypt): для локального демо подходит, но **для продакшена небезопасно**.
 
-## Persistence and runtime state
+## Хранение данных и состояние во время работы
 
-There is no traditional external database. All application data is a single JSON document plus binary attachment blobs, behind one of two interchangeable backends selected automatically at runtime (`shared/lib/db.ts`, `shared/lib/session-store.ts`, `entities/attachment/storage.ts` each export a small `*Store` interface with two implementations):
+Традиционной внешней базы данных нет. Все данные приложения представляют собой один JSON-документ плюс бинарные blob-ы вложений, и работают они через один из двух взаимозаменяемых бэкендов, который выбирается автоматически во время выполнения (`shared/lib/db.ts`, `shared/lib/session-store.ts`, `entities/attachment/storage.ts` экспортируют небольшой интерфейс `*Store` с двумя реализациями):
 
-- **Local development** (`npm run dev`/`npm start`, no `BLOB_READ_WRITE_TOKEN` set) — file-backed:
-  - `data.json` — the seed dataset (users, lists, tasks), checked into the repo, validated against the Zod schemas on load.
-  - `.local-state/db.json` — the live runtime database. On first read it's seeded from `data.json`; every mutation reads, updates, and rewrites this file. It's gitignored — deleting it resets the app back to the seed data.
-  - `.local-state/attachments/<taskId>/<attachmentId>` — uploaded file bytes, stored on disk by server-generated id (not by filename, to avoid path traversal).
-  - Sessions are also file-backed (`shared/lib/session-store`), for the same reason as `db.ts`: Next.js runs Route Handlers, Server Components, and the proxy in separate module graphs, so an in-memory singleton wouldn't be shared between them.
-- **Production on Vercel** (`BLOB_READ_WRITE_TOKEN` present, set automatically once a Blob store is attached to the project) — [Vercel Blob](https://vercel.com/docs/vercel-blob)-backed, same read-modify-write-the-whole-document semantics, just persisted as private blobs instead of local files: `db.json` and `sessions.json` each as one blob, one blob per attachment at `attachments/<taskId>/<attachmentId>`. This is what makes the app's session/login state and data actually survive between requests on a serverless platform — see "Deployment" below.
-- Vitest always uses a third, pure in-memory implementation of the same interfaces (`process.env.VITEST`), so tests never touch disk or the network.
+- **Локальная разработка** (`npm run dev`/`npm start`, `BLOB_READ_WRITE_TOKEN` не задан) использует файлы:
+  - `data.json` это seed-набор данных (пользователи, списки, задачи), он лежит в репозитории и при загрузке проверяется по схемам Zod.
+  - `.local-state/db.json` это рабочая база данных. При первом чтении она заполняется из `data.json`; каждая мутация читает, обновляет и перезаписывает этот файл. Он в gitignore, а если его удалить, приложение вернётся к seed-данным.
+  - `.local-state/attachments/<taskId>/<attachmentId>` хранит байты загруженных файлов на диске под id, который генерирует сервер (а не под именем файла, чтобы избежать path traversal).
+  - Сессии тоже хранятся в файлах (`shared/lib/session-store`) по той же причине, что и `db.ts`: Next.js запускает Route Handlers, Server Components и proxy в отдельных графах модулей, поэтому singleton в памяти не был бы общим между ними.
+- **Продакшен на Vercel** (есть `BLOB_READ_WRITE_TOKEN`, он задаётся автоматически после подключения Blob-хранилища к проекту) использует [Vercel Blob](https://vercel.com/docs/vercel-blob) с теми же семантикой «прочитать, изменить, записать документ целиком», только хранится всё в приватных blob-ах вместо локальных файлов: `db.json` и `sessions.json` по одному blob-у, и по одному blob-у на вложение в `attachments/<taskId>/<attachmentId>`. Именно это позволяет данным и состоянию сессий и логина действительно сохраняться между запросами на serverless-платформе. См. раздел «Деплой» ниже.
+- Vitest всегда использует третью, чисто in-memory реализацию тех же интерфейсов (`process.env.VITEST`), поэтому тесты никогда не трогают диск и сеть.
 
-Every write replaces the whole document (file: write-temp-then-rename; Blob: `put` with `allowOverwrite`), so a crash mid-write can't corrupt it — but there's no cross-process locking, so concurrent writers can race. Fine at demo scale; not a substitute for a real datastore under load.
+Каждая запись заменяет документ целиком (файл: запись во временный файл и переименование; Blob: `put` с `allowOverwrite`), поэтому сбой посреди записи не может его повредить, но блокировок между процессами нет, так что параллельные писатели могут конфликтовать. Для масштаба демо этого достаточно, но под нагрузкой это не замена настоящему хранилищу.
 
-## Demo environment limitations
+## Ограничения демо-среды
 
-- Deadline/time-threshold notifications are delivered by in-app polling (every 15s) while a tab is open — there's no push mechanism (email, web push) for a closed tab.
-- The "other users' changes" notification setting only synchronizes tabs of the *same browser* via `BroadcastChannel`; cross-device consistency still relies on the same 15s poll, not a websocket.
-- Session history shows an IP address, but in this local/demo setup it's a fixed placeholder value, not a real client IP.
-- Passwords use a demo-only hashing scheme (see above).
+- Уведомления о дедлайнах и пороговых значениях времени доставляются опросом внутри приложения (каждые 15 с), пока вкладка открыта. Механизма push (email, web push) для закрытой вкладки нет.
+- Настройка уведомлений «изменения других пользователей» синхронизирует только вкладки *одного и того же браузера* через `BroadcastChannel`; согласованность между устройствами по-прежнему держится на том же опросе раз в 15 с, а не на websocket.
+- История сессий показывает IP-адрес, но в этой локальной демо-конфигурации это фиксированное значение-заглушка, а не настоящий IP клиента.
+- Пароли используют демо-схему хеширования (см. выше).
 
-## Authentication & sessions
+## Аутентификация и сессии
 
-Email/password login (`features/auth/login-form.tsx`) with real-time validation and a loading state. Sessions are cookie-based and file-backed; the login history/sessions view (`widgets/settings/sessions-section.tsx`) lists device/IP/time per session, with a "log out everywhere" action that revokes all of a user's sessions at once. A shared `getCurrentSession` check (used identically by the proxy and by API routes) rejects revoked sessions everywhere.
+Вход по email и паролю (`features/auth/login-form.tsx`) с валидацией в реальном времени и состоянием загрузки. Сессии основаны на cookie и хранятся в файлах; представление истории входов и сессий (`widgets/settings/sessions-section.tsx`) показывает устройство, IP и время для каждой сессии, а действие «выйти везде» отзывает все сессии пользователя сразу. Общая проверка `getCurrentSession` (одинаково используется proxy и API-роутами) везде отклоняет отозванные сессии.
 
-## Key features
+## Основные возможности
 
-- **Lists**: create (from a template), edit (with history), soft-delete + restore (30-day window), duplicate, sharing (read-only / edit access per collaborator), search/filter with saved & recent filters, CSV/PDF export.
-- **Tasks**: create, rich fields, dependencies (`dependsOn`) with cycle detection and cascading status updates, subtasks with parent progress roll-up, soft-delete + restore, clone-with-modification, auto-generated `TEST-N` codes that backfill gaps left by deletions.
-- **Kanban board**: drag-and-drop status changes (`features/task/use-kanban-board.ts`) go through the same update path as a manual edit, so dependency/cascade rules apply identically either way. Includes per-column empty state, an in-flight save indicator, and an aggregate error banner for a failed move — all sourced from the same client-side mutation state used to disable/re-enable the drag handle.
-- **Smart Priority**: `entities/task/model.ts:calculatePriority` combines deadline proximity, dependency chain position, user-set priority, and historical time-on-similar-tasks into one score, shown alongside the raw priority.
-- **Completion Prediction**: `entities/task/completion-prediction.ts` projects a finish time from the same calendar-aware elapsed-time engine and historical-task provider used by Smart Priority.
-- **Timer**: start/pause/resume/stop, persisted across reloads; elapsed time is calculated live from `workDayHours` (a calendar-aware engine that only counts working hours), not stored as a running counter.
-- **Inline editing & autosave**: task fields save individually with a manual debounce (400ms), optimistic UI update, and rollback on a failed request; Escape cancels only the field being edited (without propagating to the surrounding dialog) and reverts it to its last committed value.
-- **Attachments**: upload/download/delete per task, with ownership checks tying every attachment to its task (no id-substitution access). Upload and delete each record an Activity Log entry.
-- **Activity Log**: a per-task audit trail (field changes, status changes, comments, attachments, rollbacks, timer actions) — `entities/activity/*`, fetched via RTK Query and invalidated automatically after any action that should refresh it, so the log updates live without reopening the task.
-- **Version rollback**: reconstructs a task's prior state from its history and previews the diff before applying it, gated by the same edit-permission check as any other mutation.
-- **Comments**: per-task, edit-access gated; `%1h%` / `%30m%` in a comment text extends the task's time estimate and is recorded in both history and the activity log.
-- **Notifications**: time-threshold alerts (75/90/100% of estimate) and list-deadline reminders (15/10/5 min), delivered by polling `/api/notifications` (server-computed, deduplicated against per-user acked keys). Two settings toggles have real effect: enabling *work-hours recalculation* shows an on-screen confirmation after a `workDayHours` change is saved; enabling *other users' changes* opens a `BroadcastChannel` so sibling tabs of the same browser refresh their notifications immediately on a dismiss instead of waiting for the next poll (see "Demo environment limitations").
-- **Export**: list-level CSV (client-side) and PDF (server-rendered); task-level CSV, PDF, and Excel — every export endpoint re-checks list/task view permissions server-side.
-- **Error boundary**: `shared/ui/ErrorBoundary.tsx` is mounted once around the routed page content (`app/app-error-boundary.tsx`, wired in `app/layout.tsx`), so a render error anywhere in a page shows an accessible retry UI instead of a blank screen, without turning the whole app into a client component.
+- **Списки**: создание (из шаблона), редактирование (с историей), мягкое удаление + восстановление (в течение 30 дней), дублирование, общий доступ (только чтение / редактирование для каждого участника), поиск и фильтры с сохранёнными и недавними фильтрами, экспорт в CSV/PDF.
+- **Задачи**: создание, расширенные поля, зависимости (`dependsOn`) с обнаружением циклов и каскадным обновлением статусов, подзадачи с агрегированием прогресса в родительской задаче, мягкое удаление + восстановление, клонирование с изменениями, автоматически генерируемые коды `TEST-N`, которые заполняют пропуски, оставшиеся после удалений.
+- **Kanban-доска**: смена статуса перетаскиванием (`features/task/use-kanban-board.ts`) идёт тем же путём обновления, что и ручное редактирование, поэтому правила зависимостей и каскада действуют одинаково в обоих случаях. Есть пустое состояние для каждой колонки, индикатор идущего сохранения и общий баннер ошибки при неудачном перемещении; всё это берётся из одного и того же клиентского состояния мутации, которое отключает и снова включает ручку перетаскивания.
+- **Smart Priority**: `entities/task/model.ts:calculatePriority` объединяет близость дедлайна, положение в цепочке зависимостей, приоритет, заданный пользователем, и историческое время на похожие задачи в одну оценку, которая показывается рядом с исходным приоритетом.
+- **Completion Prediction**: `entities/task/completion-prediction.ts` прогнозирует время завершения на основе того же календарного движка расчёта времени и провайдера исторических задач, что использует Smart Priority.
+- **Таймер**: старт/пауза/продолжение/стоп, сохраняется между перезагрузками; прошедшее время считается на лету из `workDayHours` (календарный движок, который учитывает только рабочие часы), а не хранится как бегущий счётчик.
+- **Редактирование на месте и автосохранение**: поля задачи сохраняются по отдельности с ручным debounce (400 мс), оптимистичным обновлением UI и откатом при неудачном запросе; Escape отменяет только редактируемое поле (не передавая событие окружающему диалогу) и возвращает его к последнему сохранённому значению.
+- **Вложения**: загрузка/скачивание/удаление для каждой задачи, с проверкой владения, которая привязывает каждое вложение к его задаче (подмена id для доступа невозможна). Загрузка и удаление записываются в журнал активности.
+- **Журнал активности**: аудит по каждой задаче (изменения полей, смена статуса, комментарии, вложения, откаты, действия таймера) в `entities/activity/*`; загружается через RTK Query и автоматически инвалидируется после любого действия, которое должно его обновить, так что журнал обновляется на лету без повторного открытия задачи.
+- **Откат версий**: восстанавливает прежнее состояние задачи из её истории и показывает diff перед применением; доступ закрыт той же проверкой прав на редактирование, что и любая другая мутация.
+- **Комментарии**: на уровне задачи, доступны при праве редактирования; `%1h%` / `%30m%` в тексте комментария увеличивает оценку времени задачи и записывается и в историю, и в журнал активности.
+- **Уведомления**: оповещения о пороге времени (75/90/100% оценки) и напоминания о дедлайне списка (15/10/5 мин), доставляются опросом `/api/notifications` (считаются на сервере, дедуплицируются по ключам, подтверждённым пользователем). Два переключателя в настройках действительно работают: включение *пересчёта рабочих часов* показывает подтверждение на экране после сохранения изменения `workDayHours`; включение *изменений других пользователей* открывает `BroadcastChannel`, чтобы соседние вкладки того же браузера сразу обновляли уведомления при закрытии одного из них, а не ждали следующего опроса (см. «Ограничения демо-среды»).
+- **Экспорт**: CSV на уровне списка (на клиенте) и PDF (рендер на сервере); CSV, PDF и Excel на уровне задачи. Каждый эндпоинт экспорта заново проверяет права на просмотр списка или задачи на сервере.
+- **Error boundary**: `shared/ui/ErrorBoundary.tsx` монтируется один раз вокруг содержимого страниц роутера (`app/app-error-boundary.tsx`, подключён в `app/layout.tsx`), поэтому ошибка рендера в любом месте страницы показывает доступный UI с повтором вместо пустого экрана, и при этом всё приложение не превращается в клиентский компонент.
 
 ## Redux Toolkit + RTK Query
 
-State management is Redux Toolkit; server-state (notifications, comments, task updates, activity) is RTK Query, chosen for cache invalidation and optimistic updates rather than hand-rolled fetch/loading/error state per hook. `shared/store/*` holds the store setup; each feature slice lives next to its feature (e.g. `features/comment/comments-api.ts`). Not every mutation has been migrated — attachments, timer actions, Kanban drag/drop, and rollback still use plain `fetch` wrappers, which was a deliberate scoping decision (see `docs/` for the underlying design notes) rather than an oversight.
+Для управления состоянием используется Redux Toolkit; серверное состояние (уведомления, комментарии, обновления задач, активность) ведёт RTK Query. Он выбран ради инвалидации кэша и оптимистичных обновлений вместо самописного состояния fetch/loading/error в каждом хуке. `shared/store/*` содержит настройку стора; каждый срез фичи лежит рядом с самой фичей (например, `features/comment/comments-api.ts`). Не все мутации перенесены: вложения, действия таймера, перетаскивание в Kanban и откат по-прежнему используют обычные обёртки над `fetch`. Это было осознанное решение по границам работы (см. `docs/` с заметками о дизайне), а не недосмотр.
 
-## Deployment
+## Деплой
 
-Deployed to Vercel. To reproduce:
+Развёрнуто на Vercel. Чтобы повторить:
 
-1. Import the repo as a Vercel project (Vercel auto-detects Next.js).
-2. In the project's **Storage** tab, create a **Blob** store and connect it — Vercel injects `BLOB_READ_WRITE_TOKEN` into the project's environment automatically; no manual configuration needed.
-3. Deploy (or redeploy, if the Blob store was added after the first deploy — the token only takes effect on deploys made after it's connected).
+1. Импортируйте репозиторий как проект Vercel (Vercel сам определяет Next.js).
+2. На вкладке **Storage** проекта создайте хранилище **Blob** и подключите его. Vercel сам добавит `BLOB_READ_WRITE_TOKEN` в окружение проекта; ручная настройка не нужна.
+3. Выполните деплой (или повторный деплой, если Blob-хранилище добавлено после первого деплоя, так как токен начинает действовать только на деплоях, сделанных после его подключения).
 
-Without a Blob store attached, the app still builds and boots on Vercel, but every request falls back to the file-backed store, which serverless functions can't share across invocations — the demo data (and any login session) wouldn't persist between requests. See "Persistence and runtime state" above for how the backend is selected.
+Без подключённого Blob-хранилища приложение всё равно собирается и запускается на Vercel, но каждый запрос откатывается на файловое хранилище, которое serverless-функции не могут разделять между вызовами, поэтому демо-данные (и любая сессия входа) не сохранялись бы между запросами. О том, как выбирается бэкенд, см. раздел «Хранение данных и состояние во время работы» выше.
 
-A single persistent Node process (a VM, or a platform's "always-on" container) with a writable volume for `.local-state/` also works, using the file-backed store as-is, with no Blob store involved.
+Один постоянно работающий процесс Node (виртуальная машина или «always-on» контейнер платформы) с доступным для записи томом под `.local-state/` тоже подходит: файловое хранилище работает как есть, без Blob-хранилища.
