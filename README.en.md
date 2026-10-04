@@ -8,7 +8,7 @@ A multi-user task/list manager built for a technical assessment: lists with Kanb
 
 ## Stack
 
-- **Next.js 16** (App Router, Route Handlers, Server Components). See `AGENTS.md`: this is a newer major version with real API differences from the version most tooling was trained on
+- **Next.js 16** (App Router, Route Handlers, Server Components): a newer major version with real API differences from earlier releases
 - **TypeScript**, strict mode
 - **Redux Toolkit + RTK Query** for server-state (notifications, comments, activity, task updates). The rest of the UI uses local React state
 - **Zod** for schema validation, shared between client and server
@@ -80,13 +80,6 @@ There is no traditional external database. All application data is a single JSON
 - Vitest always uses a third, pure in-memory implementation of the same interfaces (`process.env.VITEST`), so tests never touch disk or the network.
 
 Every write replaces the whole document (file: write-temp-then-rename; Blob: `put` with `allowOverwrite`), so a crash mid-write can't corrupt it, but there's no cross-process locking, so concurrent writers can race. Fine at demo scale; not a substitute for a real datastore under load.
-
-## Demo environment limitations
-
-- Deadline/time-threshold notifications are delivered by in-app polling (every 15s) while a tab is open. There's no push mechanism (email, web push) for a closed tab.
-- The "other users' changes" notification setting only synchronizes tabs of the *same browser* via `BroadcastChannel`; cross-device consistency still relies on the same 15s poll, not a websocket.
-- Session history shows an IP address, but in this local/demo setup it's a fixed placeholder value, not a real client IP.
-- Passwords use a demo-only hashing scheme (see above).
 
 ## Authentication & sessions
 
